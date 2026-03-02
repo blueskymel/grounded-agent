@@ -1,0 +1,38 @@
+[
+  {
+    "id": "q1",
+    "question": "How do we triage a P1 incident?",
+    "expected_doc_ids": ["p1_runbook"],
+    "should_refuse": false
+  },
+  {
+    "id": "q2",
+    "question": "What is the communication frequency for P1 incidents?",
+    "expected_doc_ids": ["incident_comms_teams", "severity_matrix"],
+    "should_refuse": false
+  },
+  {
+    "id": "q3",
+    "question": "What is the postmortem deadline for a P1 incident?",
+    "expected_doc_ids": ["postmortem_template", "p1_runbook"],
+    "should_refuse": false
+  },
+  {
+    "id": "q4",
+    "question": "What should a status update include during an incident?",
+    "expected_doc_ids": ["incident_comms_teams"],
+    "should_refuse": false
+  },
+  {
+    "id": "q5",
+    "question": "What is our SLA for P1 response time?",
+    "expected_doc_ids": [],
+    "should_refuse": true
+  },
+  {
+    "id": "q6",
+    "question": "What is the response time expectation for P1 incidents?",
+    "expected_doc_ids": ["severity_matrix"],
+    "should_refuse": false
+}
+]

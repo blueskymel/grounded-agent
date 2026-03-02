@@ -2,6 +2,9 @@ from typing import List
 from app.retrieval.base import RetrievedChunk
 from app.llm.client import get_aoai_client, get_chat_deployment
 from dataclasses import dataclass
+import re
+
+_SLA_TERMS = re.compile(r"\b(sla|slo|rto|rpo)\b", re.IGNORECASE)
 
 @dataclass
 class GroundedResult:
@@ -26,6 +29,13 @@ OUTPUT FORMAT EXAMPLE (follow exactly):
 - First action step. [doc_id#chunk_id]
 - Second action step. [doc_id#chunk_id][doc_id#chunk_id]
 """
+
+def _sources_explicitly_define_terms(chunks, terms_regex=_SLA_TERMS) -> bool:
+    """Return True if any retrieved chunk explicitly contains the requested terms."""
+    for c in chunks:
+        if terms_regex.search(c.text or ""):
+            return True
+    return False
 
 def is_answerable(question: str, chunks: list[RetrievedChunk]) -> bool:
     q = question.lower()
@@ -116,6 +126,13 @@ def _normalize_bullets(bullets: list[str]) -> str:
     return "\n".join(bullets)
 
 def generate_grounded_answer(question: str, chunks: List[RetrievedChunk]) -> GroundedResult:
+    # Hard refusal rule: if user asks for SLA/SLO/RTO/RPO, only answer if sources explicitly mention it
+    if _SLA_TERMS.search(question) and not _sources_explicitly_define_terms(chunks):
+        return GroundedResult(
+            answer="I don't have enough information in the provided runbooks to answer that.",
+            is_refusal=True,
+        )
+    
     client = get_aoai_client()
     deployment = get_chat_deployment()
 
@@ -148,7 +165,6 @@ SOURCES:
     bullets = _extract_bullets(raw)
 
     if not _all_bullets_have_citations(bullets):
-        print("DEBUG raw model output:\n", raw)
         return GroundedResult(
             answer="I don't have enough information in the provided runbooks to answer that.",
             is_refusal=True,
