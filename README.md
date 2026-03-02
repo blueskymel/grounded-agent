@@ -58,18 +58,19 @@ flowchart LR
   SAF --> AG
 
   TOOL --> RET[Retriever Interface]
-  RET -->|RETRIEVAL_BACKEND=faiss| FAI[FAISS Vector Index\n(local)]
-  RET -->|RETRIEVAL_BACKEND=azure_search| AIS[Azure AI Search\n(hybrid + vector + semantic)]
+  RET -->|RETRIEVAL_BACKEND=faiss| FAI[FAISS Vector Index<br/>local]
+  RET -->|RETRIEVAL_BACKEND=azure_search| AIS[Azure AI Search<br/>hybrid + vector + semantic]
 
-  AG --> AOAI[Azure OpenAI\n(Chat + Embeddings)]
+  AG --> AOAI[Azure OpenAI<br/>Chat + Embeddings]
   AG -->|Citations| UI
 
   subgraph Ingestion
     DOCS[Docs: runbooks, postmortems, PDFs] --> BLOB[Azure Blob Storage]
-    BLOB --> ING[Ingestion Worker\nextract->chunk->embed]
+    BLOB --> ING[Ingestion Worker<br/>extract → chunk → embed]
     ING --> AOAI
     ING -->|faiss mode| FAI
     ING -->|azure_search mode| AIS
   end
 
   API --> OBS[App Insights / Logs]
+  ```
