@@ -74,3 +74,126 @@ flowchart LR
 
   API --> OBS[App Insights / Logs]
   ```
+
+
+
+---
+
+## Running GroundedAgent (Local Development)
+
+### 1️⃣ Start the API
+
+From the `api/` directory:
+
+```bash
+python -m uvicorn app.main:app --reload --app-dir .
+```
+
+Open:
+
+- Swagger UI: http://127.0.0.1:8000/docs  
+- Knowledge Base summary: http://127.0.0.1:8000/kb  
+
+---
+
+## Knowledge Base Introspection
+
+GroundedAgent exposes a small introspection endpoint:
+
+```http
+GET /kb
+```
+
+Example response:
+
+```json
+[
+  { "doc_id": "incident_comms_teams", "chunks": 3 },
+  { "doc_id": "oncall_handoff", "chunks": 2 },
+  { "doc_id": "p1_runbook", "chunks": 2 }
+]
+```
+
+This allows quick inspection of what is currently indexed and how many chunks each document contains.
+
+---
+
+## Ingestion Pipeline
+
+GroundedAgent includes a repeatable ingestion pipeline.
+
+### Rebuild FAISS Index (Demo Mode)
+
+```bash
+python ingest/ingest.py
+```
+
+Example console output:
+
+```
+Total chunks: 13
+FAISS index built successfully.
+Done: FAISS rebuilt (demo mode).
+```
+
+This process:
+
+- Reads all documents in `data/raw/`
+- Extracts and chunks content
+- Generates embeddings
+- Builds a local FAISS vector index
+
+---
+
+### Enterprise Mode (Azure AI Search)
+
+If your environment variable is set to:
+
+```
+RETRIEVAL_BACKEND=azure_search
+```
+
+Then running:
+
+```bash
+python ingest/ingest.py
+```
+
+Will:
+
+- Rebuild the FAISS index
+- Upload documents and embeddings to Azure AI Search
+
+Infrastructure provisioning and teardown are handled via CLI scripts in:
+
+```
+infra/azure/
+```
+
+---
+
+## Retrieval Modes (Feature Flag)
+
+Controlled via environment variable:
+
+```
+RETRIEVAL_BACKEND=faiss          # local demo mode
+RETRIEVAL_BACKEND=azure_search   # enterprise mode
+```
+
+This enables cost-aware development while supporting production-grade Azure infrastructure.
+
+---
+
+## Key Engineering Features
+
+- Bullet-based grounded answers
+- Per-bullet citation enforcement
+- Automatic citation realignment based on retrieved chunks
+- Refusal gating when evidence is insufficient
+- Multi-document ingestion
+- Feature-flag retrieval backend (FAISS ↔ Azure AI Search)
+- CLI-based infrastructure automation
+- Clean REST API design
+
+---
