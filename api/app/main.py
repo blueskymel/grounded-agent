@@ -4,6 +4,8 @@ from app.core.config import settings
 from app.schemas.chat import ChatRequest, ChatResponse, Citation, ToolCall
 from app.retrieval.factory import get_retriever
 from app.core.agent import run_agent
+from app.schemas.docs import DocSummary
+from app.retrieval.stats import faiss_doc_stats, azure_search_doc_stats
 
 app = FastAPI(title="GroundedAgent API", version="0.1.0")
 
@@ -15,6 +17,13 @@ def health():
         "app_env": settings.app_env,
         "retrieval_backend": settings.retrieval_backend,
     }
+
+@app.get("/kb", response_model=list[DocSummary])
+def list_docs():
+    if settings.retrieval_backend == "azure_search":
+        return azure_search_doc_stats()
+
+    return faiss_doc_stats()
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
