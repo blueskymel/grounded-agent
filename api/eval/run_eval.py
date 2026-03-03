@@ -3,9 +3,6 @@ import os
 import sys
 import argparse
 from pathlib import Path
-# Ensure 'api/' is on PYTHONPATH so `import app...` works when running from api/eval
-API_DIR = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(API_DIR))
 
 import re
 import time
@@ -17,6 +14,9 @@ from dotenv import load_dotenv
 from app.retrieval.factory import get_retriever
 from app.llm.grounded_answer import generate_grounded_answer
 
+# Ensure 'api/' is on PYTHONPATH so `import app...` works when running from api/eval
+API_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(API_DIR))
 load_dotenv()
 
 REFUSAL_TEXT = "I don't have enough information in the provided runbooks to answer that."

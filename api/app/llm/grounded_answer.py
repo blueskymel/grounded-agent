@@ -56,8 +56,6 @@ def build_sources(chunks: List[RetrievedChunk]) -> str:
         lines.append(f"{tag}\n{c.text}\n")
     return "\n".join(lines)
 
-import re
-
 def _strip_citations(line: str) -> str:
     # remove trailing [doc#chunk] blocks
     return re.sub(r"(?:\s*\[[^\[\]#]+#[^\[\]]+\])+\s*$", "", line).strip()

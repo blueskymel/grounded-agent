@@ -110,8 +110,8 @@ def chat(req: ChatRequest, request: Request):
         retriever = get_retriever()
 
         # ---- Retrieval timing
-        t_retrieval0 = time.perf_counter()
         chunks = retriever.retrieve(req.message, top_k=5)
+        
         embed_ms = getattr(retriever, "last_embed_ms", 0) or 0
         search_ms = getattr(retriever, "last_search_ms", 0) or 0
         retrieval_ms = embed_ms + search_ms
