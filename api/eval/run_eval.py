@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import argparse
 from pathlib import Path
 # Ensure 'api/' is on PYTHONPATH so `import app...` works when running from api/eval
 API_DIR = Path(__file__).resolve().parents[1]
@@ -57,9 +58,14 @@ def answer_format_ok(answer: str) -> bool:
     return True
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--limit", type=int, default=0, help="Run only first N cases (0 = all)")
+    args = parser.parse_args()
     dataset_path = os.path.join("eval", "qa_dataset.json")
     with open(dataset_path, "r", encoding="utf-8") as f:
         cases: list[dict[str, Any]] = json.load(f)
+        if args.limit and args.limit > 0:
+            cases = cases[: args.limit]
 
     retriever = get_retriever()
 
@@ -143,6 +149,17 @@ def main() -> None:
     )
     if failed:
         raise SystemExit(1)
+
+    report = {
+    "backend": os.environ.get("RETRIEVAL_BACKEND", "faiss"),
+    "cases": n,
+    "recall_hit_rate": recall_hits / n if n else 0,
+    "format_rate": format_hits / n if n else 0,
+    "refusal_correct_rate": refusal_correct / n if n else 0,
+    "total_ms": total_ms,
+    }
+    Path("eval").mkdir(exist_ok=True)
+    Path("eval/report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
 
 if __name__ == "__main__":
     main()

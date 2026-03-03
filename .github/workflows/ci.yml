@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-eval:
+    runs-on: ubuntu-latest
+    env:
+      # Default to cheap local mode in CI
+      RETRIEVAL_BACKEND: faiss
+      # If your code requires AOAI env vars even in eval, add them here as secrets
+      # AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+      # AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+      # AZURE_OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        working-directory: api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest ruff
+
+      - name: Lint
+        working-directory: api
+        run: ruff check .
+
+      - name: Unit tests
+        working-directory: api
+        run: pytest -q
+
+      - name: Eval (subset) + write report
+        working-directory: api
+        run: python -m eval.run_eval --limit 25
+
+      - name: Eval threshold gate
+        working-directory: api
+        run: python -m eval.gate --min_recall 0.80 --min_format 0.95 --min_refusal 0.95

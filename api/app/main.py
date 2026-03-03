@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+
 from app.llm.grounded_answer import generate_grounded_answer
 from fastapi import FastAPI
 from fastapi import Request, HTTPException
@@ -16,10 +18,10 @@ from app.observability.logger import log_event
 from app.observability.errors import format_exception
 from app.observability.tools import summarize_tool_calls
 
-
+load_dotenv()
 LOG_DIR = Path("logs")
 LOG_DIR.mkdir(exist_ok=True)
-
+    
 LOG_FILE = LOG_DIR / "groundedagent.log"
 # Root logger
 logger = logging.getLogger()

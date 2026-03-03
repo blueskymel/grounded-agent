@@ -3,9 +3,6 @@ import os
 from collections import Counter
 from pathlib import Path
 
-from azure.core.credentials import AzureKeyCredential
-from azure.search.documents import SearchClient
-
 
 # -------------------------
 # FAISS mode
@@ -32,6 +29,9 @@ def faiss_doc_stats(index_dir: str = "data/index") -> list[dict]:
 # Azure AI Search mode
 # -------------------------
 def azure_search_doc_stats() -> list[dict]:
+    from azure.core.credentials import AzureKeyCredential
+    from azure.search.documents import SearchClient
+
     endpoint = os.environ.get("AZURE_SEARCH_ENDPOINT")
     key = os.environ.get("AZURE_SEARCH_API_KEY")
     index_name = os.environ.get("AZURE_SEARCH_INDEX_NAME")
