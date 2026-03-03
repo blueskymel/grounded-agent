@@ -77,7 +77,7 @@ This structure mirrors real-world enterprise AI systems where:
 - Retrieval must be auditable
 - Tool access is explicitly controlled
 - Deployment environments vary (local ↔ cloud)
-- CI uses EMBEDDINGS_PROVIDER=mock with committed fixtures
+- CI builds the FAISS index from api/fixtures/raw using deterministic mock embeddings (--provider mock) to avoid requiring Azure OpenAI secrets.
 - Local dev can still use AOAI embeddings by setting the Azure env vars
 
 ## High-Level Architecture
