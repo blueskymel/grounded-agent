@@ -1,6 +1,6 @@
 from app.llm.grounded_answer import generate_grounded_answer
 from fastapi import FastAPI
-from fastapi import Request
+from fastapi import Request, HTTPException
 from app.core.config import settings
 from app.schemas.chat import ChatRequest, ChatResponse, Citation, ToolCall
 from app.retrieval.factory import get_retriever
@@ -12,8 +12,10 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 import time
 import uuid
-from fastapi import Request
 from app.observability.logger import log_event
+from app.observability.errors import format_exception
+from app.observability.tools import summarize_tool_calls
+
 
 LOG_DIR = Path("logs")
 LOG_DIR.mkdir(exist_ok=True)
@@ -72,6 +74,7 @@ async def add_request_id(request: Request, call_next):
     )
     return response
 
+
 @app.get("/health")
 def health():
     return {
@@ -89,78 +92,155 @@ def list_docs():
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest, request: Request):
-    retriever = get_retriever()
-    t_retrieval0 = time.perf_counter()
-    chunks = retriever.retrieve(req.message, top_k=5)
-    retrieval_ms = int((time.perf_counter() - t_retrieval0) * 1000)
+    refusal_reason = None
+    request_id = getattr(request.state, "request_id", None)
+    backend = settings.retrieval_backend
 
-    citations = [
-        Citation(
-            doc_id=c.doc_id,
-            title=c.title,
-            source_uri=c.source_uri,
-            chunk_id=c.chunk_id,
-            score=c.score,
-            snippet=c.text[:400],
-        )
-        for c in chunks
-    ]
+    t_total0 = time.perf_counter()
 
-    agent_result = run_agent(req.message, settings.retrieval_backend)
+    # Defaults (avoid UnboundLocalError)
+    llm_ms = 0
+    refused = False
+    tool_calls_out: list[ToolCall] = []
+    agent_tool_calls_raw: list[dict] = []
 
-    # If a tool ran, return tool result (agentic path)
-    if agent_result.tool_calls:
-        tool_calls = [
-            ToolCall(name=t["name"], input=t["input"], output=t.get("output"))
-            for t in agent_result.tool_calls
+    try:
+        retriever = get_retriever()
+
+        # ---- Retrieval timing
+        t_retrieval0 = time.perf_counter()
+        chunks = retriever.retrieve(req.message, top_k=5)
+        embed_ms = getattr(retriever, "last_embed_ms", 0) or 0
+        search_ms = getattr(retriever, "last_search_ms", 0) or 0
+        retrieval_ms = embed_ms + search_ms
+
+        citations = [
+            Citation(
+                doc_id=c.doc_id,
+                title=c.title,
+                source_uri=c.source_uri,
+                chunk_id=c.chunk_id,
+                score=c.score,
+                snippet=(c.text or "")[:400],
+            )
+            for c in chunks
         ]
-        return ChatResponse(
-            answer=agent_result.answer,
-            citations=citations,
-            tool_calls=tool_calls,
-            retrieval_backend=settings.retrieval_backend,
+
+        # ---- Agent / tool path
+        agent_result = run_agent(req.message, backend)
+
+        if agent_result.tool_calls:
+            agent_tool_calls_raw = agent_result.tool_calls
+            tool_calls_out = [
+                ToolCall(name=t["name"], input=t["input"], output=t.get("output"))
+                for t in agent_result.tool_calls
+            ]
+
+            answer = agent_result.answer
+            # If you have an explicit refusal flag in agent_result later, wire it here.
+            if answer.strip() == "I don't have enough information in the provided runbooks to answer that.":
+                citations = []
+                refused = True
+
+            if refused:
+                refusal_reason = "insufficient_evidence_or_policy"
+
+            total_ms = int((time.perf_counter() - t_total0) * 1000)
+
+            top_chunks = [
+                {"doc_id": c.doc_id, "chunk_id": c.chunk_id, "score": getattr(c, "score", None)}
+                for c in chunks[:5]
+            ]
+
+            log_event(
+                "chat_request",
+                request_id=request_id,
+                retrieval_backend=backend,
+                question_preview=(req.message[:120] + "…") if len(req.message) > 120 else req.message,
+                question_len=len(req.message),
+                retrieval_ms=retrieval_ms,
+                llm_ms=0,
+                embed_ms=embed_ms,
+                search_ms=search_ms,
+                total_ms=total_ms,
+                top_k=len(chunks),
+                top_chunks=top_chunks,
+                refused=refused,
+                refusal_reason=refusal_reason,
+                answer_len=len(answer),
+                citations_count=len(citations),
+                **summarize_tool_calls(agent_tool_calls_raw),
+            )
+
+            return ChatResponse(
+                answer=answer,
+                citations=citations,
+                tool_calls=tool_calls_out,
+                retrieval_backend=backend,
+            )
+
+        # ---- Grounded answer path
+        if chunks:
+            t_llm0 = time.perf_counter()
+            result = generate_grounded_answer(req.message, chunks)
+            llm_ms = int((time.perf_counter() - t_llm0) * 1000)
+
+            answer = result.answer
+            refused = bool(getattr(result, "is_refusal", False))
+        else:
+            answer = "I don't have any indexed runbooks yet. Upload/ingest documents first."
+            refused = False
+
+        # ---- Refusal: clear citations for honest UX
+        REFUSAL_TEXT = "I don't have enough information in the provided runbooks to answer that."
+        if answer.strip() == REFUSAL_TEXT:
+            citations = []
+            refused = True
+            if not chunks:
+                refusal_reason = "no_documents"
+            elif "sla" in req.message.lower():
+                refusal_reason = "sla_term_not_defined"
+            else:
+                refusal_reason = "insufficient_evidence_or_policy"
+
+        total_ms = int((time.perf_counter() - t_total0) * 1000)
+
+        top_chunks = [
+            {"doc_id": c.doc_id, "chunk_id": c.chunk_id, "score": getattr(c, "score", None)}
+            for c in chunks[:5]
+        ]
+
+        log_event(
+            "chat_request",
+            request_id=request_id,
+            retrieval_backend=backend,
+            question_preview=(req.message[:120] + "…") if len(req.message) > 120 else req.message,
+            question_len=len(req.message),
+            retrieval_ms=retrieval_ms,
+            llm_ms=llm_ms,
+            total_ms=total_ms,
+            top_k=len(chunks),
+            top_chunks=top_chunks,
+            refused=refused,
+            answer_len=len(answer),
+            citations_count=len(citations),
+            **summarize_tool_calls(agent_tool_calls_raw),
         )
 
-    # Otherwise: retrieval + grounded answer
-    if chunks:
-        t_llm0 = time.perf_counter()
-        result = generate_grounded_answer(req.message, chunks)
-        llm_ms = int((time.perf_counter() - t_llm0) * 1000)
-        answer = result.answer
-    else:
-        answer = "I don't have any indexed runbooks yet. Upload/ingest documents first."
+        return ChatResponse(
+            answer=answer,
+            citations=citations,
+            tool_calls=[],
+            retrieval_backend=backend,
+        )
 
-    REFUSAL_TEXT = "I don't have enough information in the provided runbooks to answer that."
-    if answer.strip() == REFUSAL_TEXT:
-        citations = []
-
-    request_id = request.state.request_id
-
-    top_chunks = [
-        {
-            "doc_id": c.doc_id,
-            "chunk_id": c.chunk_id,
-            "score": getattr(c, "score", None),
-        }
-        for c in chunks[:5]
-    ]
-
-    log_event(
-        "chat_request",
-        request_id=request_id,
-        retrieval_backend=settings.retrieval_backend,
-        question_preview=(req.message[:120] + "…") if len(req.message) > 120 else req.message,
-        question_len=len(req.message),
-        retrieval_ms=retrieval_ms,
-        llm_ms=llm_ms,
-        top_k=len(chunks),
-        top_chunks=top_chunks,
-        refused=getattr(result, "is_refusal", False),
-    )
-
-    return ChatResponse(
-        answer=answer,
-        citations=citations,
-        tool_calls=[],
-        retrieval_backend=settings.retrieval_backend,
-    )
+    except Exception as e:
+        total_ms = int((time.perf_counter() - t_total0) * 1000)
+        log_event(
+            "chat_error",
+            request_id=request_id,
+            retrieval_backend=backend,
+            total_ms=total_ms,
+            error=format_exception(e),
+        )
+        raise HTTPException(status_code=500, detail="Internal server error")
