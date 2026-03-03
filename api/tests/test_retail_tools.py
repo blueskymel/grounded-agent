@@ -9,8 +9,8 @@ class DummyRetriever:
     last_embed_ms = 0
     last_search_ms = 0
     def retrieve(self, q: str, top_k: int = 5):
-        return []  # doesn't matter for tool path tests
-    
+        return []
+
 def test_retail_store_incident_tool_path(client, monkeypatch):
     from app.core import config
     import app.main as main_mod
@@ -18,7 +18,6 @@ def test_retail_store_incident_tool_path(client, monkeypatch):
     monkeypatch.setattr(config.settings, "retrieval_backend", "faiss", raising=False)
     monkeypatch.setattr(main_mod, "get_retriever", lambda: DummyRetriever())
 
-    # Force agent result with a retail tool call; avoids LLM and retrieval coupling
     dummy = DummyAgentResult(
         answer="(tool) Ran draft_store_incident_summary",
         tool_calls=[{
@@ -31,14 +30,14 @@ def test_retail_store_incident_tool_path(client, monkeypatch):
 
     r = client.post("/chat", json={"message": "Create a store incident summary for store 1234 POS outage"})
     assert r.status_code == 200
-    body = r.json()
-    assert body["tool_calls"][0]["name"] == "draft_store_incident_summary"
+    assert r.json()["tool_calls"][0]["name"] == "draft_store_incident_summary"
 
 def test_retail_price_change_tool_path(client, monkeypatch):
     from app.core import config
     import app.main as main_mod
 
     monkeypatch.setattr(config.settings, "retrieval_backend", "faiss", raising=False)
+    monkeypatch.setattr(main_mod, "get_retriever", lambda: DummyRetriever())
 
     dummy = DummyAgentResult(
         answer="(tool) Ran analyze_price_change",
@@ -52,5 +51,4 @@ def test_retail_price_change_tool_path(client, monkeypatch):
 
     r = client.post("/chat", json={"message": "Analyze price change impact for SKU123 from 12.99 to 11.99"})
     assert r.status_code == 200
-    body = r.json()
-    assert body["tool_calls"][0]["name"] == "analyze_price_change"
+    assert r.json()["tool_calls"][0]["name"] == "analyze_price_change"
