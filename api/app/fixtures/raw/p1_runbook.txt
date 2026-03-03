@@ -1,0 +1,6 @@
+P1 Incident Triage (High Severity)
+- Confirm impact: customer checkout/payment affected, store operations blocked, or widespread outage.
+- Declare P1 in the incident channel and assign roles: Incident Commander, Comms Lead, Tech Lead.
+- First 10 minutes: stabilize. Roll back the latest change if suspected. Validate monitoring signals.
+- Gather timeline, affected services, and current mitigation status.
+- Escalate to on-call teams and vendor support if required.

@@ -1,0 +1,4 @@
+Severity Matrix
+P1: Critical business impact (e.g., POS outage, payments down, widespread checkout failure).
+P1 Response expectation: acknowledge within 5 minutes and begin mitigation immediately.
+P1 Comms: initial update within 10 minutes; then every 15 minutes while major impact continues.

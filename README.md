@@ -77,6 +77,8 @@ This structure mirrors real-world enterprise AI systems where:
 - Retrieval must be auditable
 - Tool access is explicitly controlled
 - Deployment environments vary (local ↔ cloud)
+- CI uses EMBEDDINGS_PROVIDER=mock with committed fixtures
+- Local dev can still use AOAI embeddings by setting the Azure env vars
 
 ## High-Level Architecture
 

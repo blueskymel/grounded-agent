@@ -1,0 +1,4 @@
+Postmortem Requirements (P1)
+Deadline: publish postmortem within 5 business days after incident resolution.
+Include: impact summary, timeline, root cause, contributing factors, corrective actions, and owners.
+If customer-impacting: include customer comms summary and follow-up actions.

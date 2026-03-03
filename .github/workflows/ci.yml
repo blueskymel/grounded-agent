@@ -36,6 +36,21 @@ jobs:
         working-directory: api
         run: pytest -q
 
+      - name: Build FAISS index for eval (CI fixtures)
+        working-directory: api
+        env:
+          RETRIEVAL_BACKEND: faiss
+        run: |
+          mkdir -p data/index
+          python -m ingest.build_faiss_index --input_dir fixtures/raw --out_dir data/index
+
+      - name: Build FAISS index (fixtures, mock embeddings)
+        working-directory: api
+        env:
+            EMBEDDINGS_PROVIDER: mock
+        run: |
+            python -m ingest.build_faiss_index --input_dir fixtures/raw --out_dir data/index          
+
       - name: Eval (subset) + write report
         working-directory: api
         run: python -m eval.run_eval --limit 25

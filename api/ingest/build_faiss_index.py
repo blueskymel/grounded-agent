@@ -1,62 +1,83 @@
-import os
+# api/ingest/build_faiss_index.py
+from __future__ import annotations
+
+import argparse
+import hashlib
 import json
+import os
+from pathlib import Path
+
 import numpy as np
 import faiss
-from pathlib import Path
 from dotenv import load_dotenv
-from openai import AzureOpenAI
 
 load_dotenv()
 
-DATA_DIR = Path("data/raw")
-INDEX_DIR = Path("data/index")
-INDEX_DIR.mkdir(parents=True, exist_ok=True)
+DEFAULT_DIM = int(os.environ.get("MOCK_EMBED_DIM", "384"))
 
-client = AzureOpenAI(
-    azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
-    api_key=os.environ["AZURE_OPENAI_API_KEY"],
-    api_version=os.environ["AZURE_OPENAI_API_VERSION"],
-)
+def chunk_text(text: str, chunk_size: int = 300) -> list[str]:
+    return [text[i : i + chunk_size] for i in range(0, len(text), chunk_size)]
 
-EMBEDDING_MODEL = os.environ["AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT"]
+def mock_embed(text: str, dim: int = DEFAULT_DIM) -> list[float]:
+    # Deterministic per-text embedding: seed from sha256(text)
+    h = hashlib.sha256(text.encode("utf-8")).digest()
+    seed = int.from_bytes(h[:8], "little", signed=False)
+    rng = np.random.default_rng(seed)
+    v = rng.normal(size=(dim,)).astype("float32")
+    # Normalize so cosine-ish behavior is stable
+    v /= (np.linalg.norm(v) + 1e-8)
+    return v.tolist()
 
-def chunk_text(text, chunk_size=300):
-    return [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
+def aoai_client():
+    from openai import AzureOpenAI
+    return AzureOpenAI(
+        azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
+        api_key=os.environ["AZURE_OPENAI_API_KEY"],
+        api_version=os.environ["AZURE_OPENAI_API_VERSION"],
+    )
 
-def main():
-    chunks = []
-    for file in DATA_DIR.glob("*.txt"):
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input_dir", default="data/raw")
+    parser.add_argument("--out_dir", default="data/index")
+    parser.add_argument("--chunk_size", type=int, default=300)
+    parser.add_argument("--provider", default=os.environ.get("EMBEDDINGS_PROVIDER", "aoai"))
+    args = parser.parse_args()
+
+    data_dir = Path(args.input_dir)
+    index_dir = Path(args.out_dir)
+    index_dir.mkdir(parents=True, exist_ok=True)
+
+    files = list(data_dir.glob("*.txt")) + list(data_dir.glob("*.md"))
+    if not files:
+        raise FileNotFoundError(f"No input docs found in {data_dir} (expected .txt or .md)")
+
+    chunks: list[dict] = []
+    for file in files:
         text = file.read_text(encoding="utf-8")
-        pieces = chunk_text(text)
-        for idx, piece in enumerate(pieces):
-            chunks.append({
-                "doc_id": file.stem,
-                "chunk_id": f"{file.stem}-{idx}",
-                "text": piece
-            })
+        for idx, piece in enumerate(chunk_text(text, chunk_size=args.chunk_size)):
+            chunks.append({"doc_id": file.stem, "chunk_id": f"{file.stem}-{idx}", "text": piece})
 
     print(f"Total chunks: {len(chunks)}")
 
-    embeddings = []
-    for chunk in chunks:
-        resp = client.embeddings.create(
-            model=EMBEDDING_MODEL,
-            input=chunk["text"]
-        )
-        vector = resp.data[0].embedding
-        embeddings.append(vector)
+    embeddings: list[list[float]] = []
+    if args.provider == "mock":
+        embeddings = [mock_embed(c["text"]) for c in chunks]
+    else:
+        client = aoai_client()
+        model = os.environ["AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT"]
+        for c in chunks:
+            resp = client.embeddings.create(model=model, input=c["text"])
+            embeddings.append(resp.data[0].embedding)
 
-    embeddings_np = np.array(embeddings).astype("float32")
-    dimension = embeddings_np.shape[1]
+    emb = np.array(embeddings, dtype="float32")
+    index = faiss.IndexFlatL2(emb.shape[1])
+    index.add(emb)
 
-    index = faiss.IndexFlatL2(dimension)
-    index.add(embeddings_np)
-
-    faiss.write_index(index, str(INDEX_DIR / "faiss.index"))
-
-    with open(INDEX_DIR / "chunks.jsonl", "w", encoding="utf-8") as f:
-        for chunk in chunks:
-            f.write(json.dumps(chunk) + "\n")
+    faiss.write_index(index, str(index_dir / "faiss.index"))
+    with open(index_dir / "chunks.jsonl", "w", encoding="utf-8") as f:
+        for c in chunks:
+            f.write(json.dumps(c) + "\n")
 
     print("FAISS index built successfully.")
 

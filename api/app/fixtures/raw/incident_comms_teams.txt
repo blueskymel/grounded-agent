@@ -1,0 +1,6 @@
+Incident Communications (P1)
+Communication frequency: every 15 minutes until stabilized, then every 30 minutes.
+Status updates must include:
+- What happened (symptoms), what is impacted (stores/customers), and current severity.
+- What we are doing now (mitigation), ETA / next update time, and who owns actions.
+Use concise bullet updates and avoid speculation. Confirm facts before publishing.
