@@ -1,6 +1,6 @@
 # GroundedAgent — Agentic RAG Copilot (Azure-first)
 
-**GroundedAgent** is a private, production-style **Agentic RAG Copilot** for IT Ops teams. It answers questions grounded in internal runbooks, postmortems, policies, and incident notes **with citations**, and can **take actions via tools** (e.g., draft a change plan, create a ticket — mocked initially).
+**GroundedAgent** is a private, production-style **Agentic RAG Copilot platform** for IT Ops and Retail Enterprise teams. It answers questions grounded in internal runbooks, postmortems, policies, and incident notes **with citations**, and can **take actions via tools** (e.g., draft a change plan, create a ticket — mocked initially).
 
 This repo is designed to demonstrate **real AI Engineer skills**: retrieval, orchestration, safety, observability, deployment, and cost control.
 
@@ -22,6 +22,61 @@ Ops teams lose time and reliability due to:
   - **Azure AI Search** (enterprise mode)
 
 ---
+
+## Retail AI Extension (Enterprise Workflow Tools)
+
+GroundedAgent is designed as a **platform pattern**: grounded RAG + agentic tool orchestration.
+
+In addition to IT Ops workflows, the system now includes **Retail Operations tool examples** (mocked but production-shaped):
+
+### 🏬 draft_store_incident_summary
+Generates a structured incident summary for store operations:
+- What happened
+- Customer impact
+- Actions taken
+- Next steps
+- Structured metadata (store_id, duration, timestamp)
+
+Designed to model enterprise workflows for:
+- Store outages (POS, payments, network)
+- Safety incidents
+- Operational escalations
+
+---
+
+### 💲 analyze_price_change
+Performs a pricing impact analysis:
+- Price delta + % change
+- Optional margin calculation (if unit cost provided)
+- Risk flags (large move, margin drop, negative margin)
+
+Designed to model:
+- Pricing ops decision support
+- Governance & approval workflows
+- Commercial analytics copilots
+
+---
+
+These tools demonstrate how the same **grounded RAG + agent orchestration backend**
+can be embedded into large-scale retail environments impacting thousands of stores and millions of customers.
+
+---
+
+## Architecture Philosophy
+
+GroundedAgent follows an enterprise-safe AI architecture pattern:
+
+1. **Tool-first orchestration** (deterministic workflows when appropriate)
+2. **Grounded RAG fallback** with citation enforcement
+3. **Refusal gating** when evidence is insufficient
+4. **Feature-flag infrastructure** (FAISS ↔ Azure AI Search)
+5. **Evaluation harness + CI gate** to prevent quality regression
+
+This structure mirrors real-world enterprise AI systems where:
+- LLMs augment workflows
+- Retrieval must be auditable
+- Tool access is explicitly controlled
+- Deployment environments vary (local ↔ cloud)
 
 ## High-Level Architecture
 
@@ -195,5 +250,8 @@ This enables cost-aware development while supporting production-grade Azure infr
 - Feature-flag retrieval backend (FAISS ↔ Azure AI Search)
 - CLI-based infrastructure automation
 - Clean REST API design
-
+- Agent tool registry with allow-list enforcement
+- Retail Ops workflow tools (store incident summary, pricing impact analysis)
+- Deterministic agent short-circuit path (tool execution before LLM)
+- Unit-tested orchestration paths
 ---

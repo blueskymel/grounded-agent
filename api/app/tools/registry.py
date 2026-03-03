@@ -1,11 +1,14 @@
 from typing import Callable, Any
 from app.tools.incident_tools import create_incident_ticket, draft_change_plan
+from app.tools.retail_tools import draft_store_incident_summary, analyze_price_change
 
 ToolFn = Callable[[dict], dict]
 
 TOOL_REGISTRY: dict[str, ToolFn] = {
     "create_incident_ticket": create_incident_ticket,
     "draft_change_plan": draft_change_plan,
+    "draft_store_incident_summary": draft_store_incident_summary,
+    "analyze_price_change": analyze_price_change,
 }
 
 
