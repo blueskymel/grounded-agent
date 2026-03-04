@@ -127,23 +127,41 @@ def _normalize_bullets(bullets: list[str]) -> str:
 def generate_grounded_answer(question: str, chunks: List[RetrievedChunk]) -> GroundedResult:
     provider = os.environ.get("LLM_PROVIDER", "aoai").lower().strip()
 
+    # Hard refusal rule: if user asks for SLA/SLO/RTO/RPO, only answer if sources explicitly mention it
+    # Applies to BOTH aoai and mock modes.
+    if _SLA_TERMS.search(question) and not _sources_explicitly_define_terms(chunks):
+        return GroundedResult(
+            answer="I don't have enough information in the provided runbooks to answer that.",
+            is_refusal=True,
+        )
+
     if provider == "mock":
+        # Deterministic "extractive" answer for CI/eval without AOAI.
+        # Must satisfy _CITATION_RE = r"\[[^\[\]#]+#[^\[\]]+\]\s*$"
+        # i.e. each bullet ends with: [doc_id#chunk_id]
         if not chunks:
             return GroundedResult(
                 answer="I don't have enough information in the provided runbooks to answer that.",
                 is_refusal=True,
             )
 
-        lines = []
+        lines: list[str] = []
         for i, ch in enumerate(chunks[:5], start=1):
             text = (getattr(ch, "text", "") or "").strip().replace("\n", " ")
+            text = " ".join(text.split())  # collapse whitespace
             if not text:
                 continue
-            if len(text) > 200:
-                text = text[:200].rstrip() + "…"
+            if len(text) > 180:
+                text = text[:180].rstrip() + "…"
 
-            # numbered citation format
-            lines.append(f"- {text} [{i}]")
+            doc_id = getattr(ch, "doc_id", "unknown") or "unknown"
+            chunk_id = getattr(ch, "chunk_id", f"chunk-{i}") or f"chunk-{i}"
+
+            # Ensure no stray brackets/# that would break the regex
+            doc_id = str(doc_id).replace("[", "").replace("]", "").replace("#", "")
+            chunk_id = str(chunk_id).replace("[", "").replace("]", "").replace("#", "")
+
+            lines.append(f"- {text} [{doc_id}#{chunk_id}]")
 
         if not lines:
             return GroundedResult(
@@ -156,13 +174,7 @@ def generate_grounded_answer(question: str, chunks: List[RetrievedChunk]) -> Gro
             is_refusal=False,
         )
 
-    # Hard refusal rule: if user asks for SLA/SLO/RTO/RPO, only answer if sources explicitly mention it
-    if _SLA_TERMS.search(question) and not _sources_explicitly_define_terms(chunks):
-        return GroundedResult(
-            answer="I don't have enough information in the provided runbooks to answer that.",
-            is_refusal=True,
-        )
-
+    # ---- AOAI path (unchanged) ----
     client = get_aoai_client()
     deployment = get_chat_deployment()
 
