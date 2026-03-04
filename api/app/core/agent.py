@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from app.tools.registry import run_tool
-
+from app.agent.intent_parser import parse_intent
 
 @dataclass
 class PlanResult:
@@ -52,6 +52,28 @@ def simple_plan(message: str) -> tuple[str, dict | None]:
 
 
 def run_agent(message: str, retrieval_backend: str) -> PlanResult:
+    intent = parse_intent(message)
+
+    if intent and intent.name == "ANALYZE_PRICE_CHANGE":
+        return run_tool(
+            "analyze_price_change",
+            {
+                "sku": intent.sku,
+                "old_price": intent.old_price,
+                "new_price": intent.new_price,
+            },
+        )
+
+    if intent and intent.name == "STORE_INCIDENT":
+        return run_tool(
+            "draft_store_incident_summary",
+            {
+                "store_id": intent.store_id,
+                "incident_type": intent.incident_type,
+                "duration_minutes": intent.duration_minutes,
+            },
+        )
+
     action, tool_input = simple_plan(message)
 
     if action == "retrieve":
