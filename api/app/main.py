@@ -100,18 +100,69 @@ def chat(req: ChatRequest, request: Request):
 
     t_total0 = time.perf_counter()
 
-    # Defaults (avoid UnboundLocalError)
+    # Defaults
     llm_ms = 0
     refused = False
+    retrieval_ms = 0
+    embed_ms = 0
+    search_ms = 0
+    citations: list[Citation] = []
     tool_calls_out: list[ToolCall] = []
     agent_tool_calls_raw: list[dict] = []
+    chunks = []
 
     try:
+        # ---- Agent / tool path FIRST (avoid retrieval coupling/cost)
+        agent_result = run_agent(req.message, backend)
+
+        if getattr(agent_result, "tool_calls", None):
+            agent_tool_calls_raw = agent_result.tool_calls
+            tool_calls_out = [
+                ToolCall(name=t["name"], input=t["input"], output=t.get("output"))
+                for t in agent_result.tool_calls
+            ]
+
+            answer = agent_result.answer
+
+            REFUSAL_TEXT = "I don't have enough information in the provided runbooks to answer that."
+            if answer.strip() == REFUSAL_TEXT:
+                refused = True
+                refusal_reason = "insufficient_evidence_or_policy"
+
+            total_ms = int((time.perf_counter() - t_total0) * 1000)
+
+            log_event(
+                "chat_request",
+                request_id=request_id,
+                retrieval_backend=backend,
+                question_preview=(req.message[:120] + "…") if len(req.message) > 120 else req.message,
+                question_len=len(req.message),
+                retrieval_ms=0,
+                llm_ms=0,
+                embed_ms=0,
+                search_ms=0,
+                total_ms=total_ms,
+                top_k=0,
+                top_chunks=[],
+                refused=refused,
+                refusal_reason=refusal_reason,
+                answer_len=len(answer),
+                citations_count=0,
+                **summarize_tool_calls(agent_tool_calls_raw),
+            )
+
+            return ChatResponse(
+                answer=answer,
+                citations=[],
+                tool_calls=tool_calls_out,
+                retrieval_backend=backend,
+            )
+
+        # ---- Retrieval + grounded answer path
         retriever = get_retriever()
 
-        # ---- Retrieval timing
         chunks = retriever.retrieve(req.message, top_k=5)
-        
+
         embed_ms = getattr(retriever, "last_embed_ms", 0) or 0
         search_ms = getattr(retriever, "last_search_ms", 0) or 0
         retrieval_ms = embed_ms + search_ms
@@ -128,58 +179,73 @@ def chat(req: ChatRequest, request: Request):
             for c in chunks
         ]
 
-        # ---- Agent / tool path
-        agent_result = run_agent(req.message, backend)
+        if chunks:
+            t_llm0 = time.perf_counter()
+            result = generate_grounded_answer(req.message, chunks)
+            llm_ms = int((time.perf_counter() - t_llm0) * 1000)
 
-        if agent_result.tool_calls:
-            agent_tool_calls_raw = agent_result.tool_calls
-            tool_calls_out = [
-                ToolCall(name=t["name"], input=t["input"], output=t.get("output"))
-                for t in agent_result.tool_calls
-            ]
+            answer = result.answer
+            refused = bool(getattr(result, "is_refusal", False))
+        else:
+            answer = "I don't have any indexed runbooks yet. Upload/ingest documents first."
+            refused = False
 
-            answer = agent_result.answer
-            # If you have an explicit refusal flag in agent_result later, wire it here.
-            if answer.strip() == "I don't have enough information in the provided runbooks to answer that.":
-                citations = []
-                refused = True
-
-            if refused:
+        # ---- Refusal: clear citations for honest UX
+        REFUSAL_TEXT = "I don't have enough information in the provided runbooks to answer that."
+        if answer.strip() == REFUSAL_TEXT:
+            citations = []
+            refused = True
+            if not chunks:
+                refusal_reason = "no_documents"
+            elif "sla" in req.message.lower():
+                refusal_reason = "sla_term_not_defined"
+            else:
                 refusal_reason = "insufficient_evidence_or_policy"
 
-            total_ms = int((time.perf_counter() - t_total0) * 1000)
+        total_ms = int((time.perf_counter() - t_total0) * 1000)
 
-            top_chunks = [
-                {"doc_id": c.doc_id, "chunk_id": c.chunk_id, "score": getattr(c, "score", None)}
-                for c in chunks[:5]
-            ]
+        top_chunks = [
+            {"doc_id": c.doc_id, "chunk_id": c.chunk_id, "score": getattr(c, "score", None)}
+            for c in chunks[:5]
+        ]
 
-            log_event(
-                "chat_request",
-                request_id=request_id,
-                retrieval_backend=backend,
-                question_preview=(req.message[:120] + "…") if len(req.message) > 120 else req.message,
-                question_len=len(req.message),
-                retrieval_ms=retrieval_ms,
-                llm_ms=0,
-                embed_ms=embed_ms,
-                search_ms=search_ms,
-                total_ms=total_ms,
-                top_k=len(chunks),
-                top_chunks=top_chunks,
-                refused=refused,
-                refusal_reason=refusal_reason,
-                answer_len=len(answer),
-                citations_count=len(citations),
-                **summarize_tool_calls(agent_tool_calls_raw),
-            )
+        log_event(
+            "chat_request",
+            request_id=request_id,
+            retrieval_backend=backend,
+            question_preview=(req.message[:120] + "…") if len(req.message) > 120 else req.message,
+            question_len=len(req.message),
+            retrieval_ms=retrieval_ms,
+            llm_ms=llm_ms,
+            embed_ms=embed_ms,
+            search_ms=search_ms,
+            total_ms=total_ms,
+            top_k=len(chunks),
+            top_chunks=top_chunks,
+            refused=refused,
+            refusal_reason=refusal_reason,
+            answer_len=len(answer),
+            citations_count=len(citations),
+            **summarize_tool_calls([]),
+        )
 
-            return ChatResponse(
-                answer=answer,
-                citations=citations,
-                tool_calls=tool_calls_out,
-                retrieval_backend=backend,
-            )
+        return ChatResponse(
+            answer=answer,
+            citations=citations,
+            tool_calls=[],
+            retrieval_backend=backend,
+        )
+
+    except Exception as e:
+        total_ms = int((time.perf_counter() - t_total0) * 1000)
+        log_event(
+            "chat_error",
+            request_id=request_id,
+            retrieval_backend=backend,
+            total_ms=total_ms,
+            error=format_exception(e),
+        )
+        raise HTTPException(status_code=500, detail="Internal server error")
 
         # ---- Grounded answer path
         if chunks:

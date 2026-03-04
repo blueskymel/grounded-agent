@@ -1,7 +1,11 @@
 from typing import Callable
 from app.tools.incident_tools import create_incident_ticket, draft_change_plan
-from app.tools.retail_tools import draft_store_incident_summary, analyze_price_change
-from app.tools.retail_tools import triage_low_stock, check_promo_compliance
+from app.tools.retail_tools import (
+    draft_store_incident_summary,
+    analyze_price_change,
+    triage_low_stock,
+    check_promo_compliance,
+)
 
 ToolFn = Callable[[dict], dict]
 

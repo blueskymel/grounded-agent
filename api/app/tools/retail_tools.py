@@ -6,9 +6,8 @@ from typing import Any, Dict, Optional
 
 def draft_store_incident_summary(tool_input: dict) -> dict:
     """
-    Existing tool (keep if you already have it elsewhere).
-    Leaving here as a placeholder in case your file contains it.
-    If you already have it implemented, remove this duplicate.
+    Retail Ops: draft a store incident summary (mock).
+    Tool-registry compatible: accepts tool_input dict.
     """
     store_id = str(tool_input.get("store_id", "unknown"))
     incident_type = str(tool_input.get("incident_type", "unspecified"))
@@ -16,6 +15,7 @@ def draft_store_incident_summary(tool_input: dict) -> dict:
 
     return {
         "ok": True,
+        "tool": "draft_store_incident_summary",
         "store_id": store_id,
         "incident_type": incident_type,
         "duration_minutes": duration_minutes,
@@ -25,9 +25,8 @@ def draft_store_incident_summary(tool_input: dict) -> dict:
 
 def analyze_price_change(tool_input: dict) -> dict:
     """
-    Existing tool (keep if you already have it elsewhere).
-    Leaving here as a placeholder in case your file contains it.
-    If you already have it implemented, remove this duplicate.
+    Commercial: analyze price change impact (mock).
+    Tool-registry compatible: accepts tool_input dict.
     """
     sku = str(tool_input.get("sku", "unknown"))
     old_price = float(tool_input.get("old_price", 0))
@@ -37,21 +36,29 @@ def analyze_price_change(tool_input: dict) -> dict:
     delta = new_price - old_price
     pct = (delta / old_price) * 100 if old_price else None
 
+    # Optional margin view if unit_cost provided
+    unit_cost_f = float(unit_cost) if unit_cost is not None else None
+    old_margin = (old_price - unit_cost_f) if unit_cost_f is not None else None
+    new_margin = (new_price - unit_cost_f) if unit_cost_f is not None else None
+
     return {
         "ok": True,
+        "tool": "analyze_price_change",
         "sku": sku,
         "old_price": old_price,
         "new_price": new_price,
         "delta": round(delta, 4),
         "delta_pct": round(pct, 4) if pct is not None else None,
-        "unit_cost": float(unit_cost) if unit_cost is not None else None,
+        "unit_cost": unit_cost_f,
+        "old_unit_margin": round(old_margin, 4) if old_margin is not None else None,
+        "new_unit_margin": round(new_margin, 4) if new_margin is not None else None,
     }
 
 
 def triage_low_stock(tool_input: dict) -> Dict[str, Any]:
     """
     Retail Ops: low-stock triage.
-    Tool registry compatible: accepts tool_input dict.
+    Tool-registry compatible: accepts tool_input dict.
     """
     store_id = tool_input.get("store_id")
     sku = tool_input.get("sku")
@@ -85,6 +92,7 @@ def triage_low_stock(tool_input: dict) -> Dict[str, Any]:
         except Exception:
             return {"ok": False, "error": "lead_time_days must be an integer"}
 
+    # Simple, explainable heuristics
     priority = "P3"
     if on_hand_int == 0:
         priority = "P1"
@@ -95,7 +103,7 @@ def triage_low_stock(tool_input: dict) -> Dict[str, Any]:
     if forecast and forecast > 0:
         days_cover = round(on_hand_int / forecast, 2)
 
-    recommended_actions = []
+    recommended_actions: list[str] = []
     if on_hand_int == 0:
         recommended_actions.append("Mark as out-of-stock; enable substitutions if allowed.")
         recommended_actions.append("Check inbound shipments and update ETA.")
@@ -108,9 +116,10 @@ def triage_low_stock(tool_input: dict) -> Dict[str, Any]:
 
     suggested_order_qty = None
     if forecast and lead and forecast > 0 and lead > 0:
+        # Aim for lead_time * forecast + small buffer
         suggested_order_qty = int(round((lead * forecast) + max(0, 2 - on_hand_int)))
 
-    notify = []
+    notify: list[str] = []
     if priority in ("P1", "P2"):
         notify = ["Store Manager", "Replenishment Planner"]
         if on_hand_int == 0:
@@ -135,7 +144,7 @@ def triage_low_stock(tool_input: dict) -> Dict[str, Any]:
 def check_promo_compliance(tool_input: dict) -> Dict[str, Any]:
     """
     Commercial: promotion compliance check (mock).
-    Tool registry compatible: accepts tool_input dict.
+    Tool-registry compatible: accepts tool_input dict.
     """
     promo_id = tool_input.get("promo_id")
     sku = tool_input.get("sku")
@@ -168,21 +177,23 @@ def check_promo_compliance(tool_input: dict) -> Dict[str, Any]:
     sd = _parse_date(start_date) if isinstance(start_date, str) else None
     ed = _parse_date(end_date) if isinstance(end_date, str) else None
 
-    reasons = []
+    reasons: list[str] = []
     passed = True
 
     if sd and ed and ed < sd:
         passed = False
         reasons.append("End date is before start date.")
 
+    # Example rules (mock but plausible)
     if price_f < 0.5:
         passed = False
         reasons.append("Price appears unusually low; requires finance approval.")
 
+    # Promo id conventions (enterprise vibe)
     if not (str(promo_id).upper().startswith("PROMO") or str(promo_id).upper().startswith("PR")):
         reasons.append("Promo ID does not match standard naming convention (PROMO*/PR*).")
 
-    required_approvals = []
+    required_approvals: list[str] = []
     if price_f < 1.0:
         required_approvals.append("Finance")
     if channel_norm in ("online", "both"):
