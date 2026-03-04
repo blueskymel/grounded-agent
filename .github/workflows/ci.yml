@@ -8,12 +8,8 @@ jobs:
   test-eval:
     runs-on: ubuntu-latest
     env:
-      # Default to cheap local mode in CI
       RETRIEVAL_BACKEND: faiss
-      # If your code requires AOAI env vars even in eval, add them here as secrets
-      # AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-      # AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
-      # AZURE_OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -26,36 +22,29 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest ruff
 
       - name: Lint
         working-directory: api
-        run: ruff check .
+        run: |
+          ruff check .
 
       - name: Unit tests
         working-directory: api
-        run: pytest -q
+        run: |
+          pytest -q
 
-      - name: Build FAISS index for eval (CI fixtures)
+      - name: Build FAISS index for eval (fixtures, mock embeddings)
         working-directory: api
-        env:
-          RETRIEVAL_BACKEND: faiss
         run: |
           mkdir -p data/index
-          python -m ingest.build_faiss_index --input_dir fixtures/raw --out_dir data/index
-
-      - name: Build FAISS index (fixtures, mock embeddings)
-        working-directory: api
-        env:
-            EMBEDDINGS_PROVIDER: mock
-        run: |
-            mkdir -p data/index
-            python -m ingest.build_faiss_index --input_dir fixtures/raw --out_dir data/index
+          python -m ingest.build_faiss_index --input_dir fixtures/raw --out_dir data/index --provider mock
 
       - name: Eval (subset) + write report
         working-directory: api
-        run: python -m eval.run_eval --limit 25
+        run: |
+          python -m eval.run_eval --limit 25
 
       - name: Eval threshold gate
         working-directory: api
-        run: python -m eval.gate --min_recall 0.80 --min_format 0.95 --min_refusal 0.95
+        run: |
+          python -m eval.gate --min_recall 0.80 --min_format 0.95 --min_refusal 0.95
