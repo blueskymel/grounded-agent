@@ -8,7 +8,8 @@ jobs:
   test-eval:
     runs-on: ubuntu-latest
     env:
-      RETRIEVAL_BACKEND: faiss
+        RETRIEVAL_BACKEND: faiss
+        EMBEDDINGS_PROVIDER: mock
 
     steps:
       - uses: actions/checkout@v4
