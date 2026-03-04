@@ -34,5 +34,22 @@
     "question": "What is the response time expectation for P1 incidents?",
     "expected_doc_ids": ["severity_matrix"],
     "should_refuse": false
+  },
+
+  {
+    "id": "q7",
+    "question": "Low stock store 2045 SKU777 on hand 0",
+    "expected_doc_ids": [],
+    "should_refuse": false,
+    "format_required": false,
+    "recall_required": false
+  },
+  {
+    "id": "q8",
+    "question": "Check promo compliance promo PROMO-99 for SKU123 price 0.49 channel online start 2026-03-01 end 2026-03-10",
+    "expected_doc_ids": [],
+    "should_refuse": false,
+    "format_required": false,
+    "recall_required": false  
 }
 ]

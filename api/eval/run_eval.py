@@ -41,7 +41,10 @@ def extract_cited_doc_ids(answer: str) -> set[str]:
     cites = re.findall(r"\[([^\[\]#]+)#[^\[\]]+\]", answer or "")
     return set(cites)
 
-def answer_format_ok(answer: str) -> bool:
+def answer_format_ok(answer: str, *, format_required: bool = True) -> bool:
+    if not format_required:
+        return True  # tool answers (or other modes) don't need citation format
+
     if not answer:
         return False
     if answer.strip() == REFUSAL_TEXT:
@@ -77,6 +80,10 @@ def main() -> None:
         question = case["question"]
         expected = case.get("expected_doc_ids", [])
         should_refuse = bool(case.get("should_refuse", False))
+        format_required = bool(case.get("format_required", True))
+
+        # If expected_doc_ids is empty, default recall to NOT required (tool cases or freeform)
+        recall_required = bool(case.get("recall_required", bool(expected)))
 
         t0 = time.time()
         chunks = retriever.retrieve(question, top_k=5)
@@ -93,11 +100,12 @@ def main() -> None:
         latency_ms = int((t1 - t0) * 1000)
 
         refused = answer.strip() == REFUSAL_TEXT
-        format_ok = answer_format_ok(answer)
+        format_ok = answer_format_ok(answer, format_required=format_required)
 
         # Recall@k (hit if ANY expected doc_id is retrieved)
+        # If recall is not required for this case, it's automatically OK.
         recall_hit = True
-        if expected:
+        if recall_required and expected:
             recall_hit = any(doc in retrieved_doc_ids for doc in expected)
 
         results.append(

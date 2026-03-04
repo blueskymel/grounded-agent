@@ -54,37 +54,56 @@ def simple_plan(message: str) -> tuple[str, dict | None]:
 def run_agent(message: str, retrieval_backend: str) -> PlanResult:
     intent = parse_intent(message)
 
+    def _tool_result(tool_name: str, tool_input: dict) -> PlanResult:
+        output = run_tool(tool_name, tool_input)
+        return PlanResult(
+            answer=f"(tool) Ran {tool_name}",
+            tool_calls=[{"name": tool_name, "input": tool_input, "output": output}],
+        )
+
+    # ---- Intent-first deterministic routing ----
+    if intent and intent.name == "LOW_STOCK_TRIAGE":
+        tool_input = {
+            "store_id": intent.store_id,
+            "sku": intent.sku,
+            "on_hand": intent.on_hand,
+            "forecast_per_day": intent.forecast_per_day,
+            "lead_time_days": intent.lead_time_days,
+        }
+        return _tool_result("triage_low_stock", tool_input)
+
+    if intent and intent.name == "PROMO_COMPLIANCE_CHECK":
+        tool_input = {
+            "promo_id": intent.promo_id,
+            "sku": intent.sku,
+            "price": intent.price,
+            "channel": intent.channel,
+        }
+        return _tool_result("check_promo_compliance", tool_input)
+
     if intent and intent.name == "ANALYZE_PRICE_CHANGE":
-        return run_tool(
-            "analyze_price_change",
-            {
-                "sku": intent.sku,
-                "old_price": intent.old_price,
-                "new_price": intent.new_price,
-            },
-        )
+        tool_input = {
+            "sku": intent.sku,
+            "old_price": intent.old_price,
+            "new_price": intent.new_price,
+        }
+        return _tool_result("analyze_price_change", tool_input)
 
-    if intent and intent.name == "STORE_INCIDENT":
-        return run_tool(
-            "draft_store_incident_summary",
-            {
-                "store_id": intent.store_id,
-                "incident_type": intent.incident_type,
-                "duration_minutes": intent.duration_minutes,
-            },
-        )
+    if intent and intent.name in ("STORE_INCIDENT", "DRAFT_STORE_INCIDENT_SUMMARY"):
+        tool_input = {
+            "store_id": intent.store_id,
+            "incident_type": intent.incident_type,
+            "duration_minutes": intent.duration_minutes,
+        }
+        return _tool_result("draft_store_incident_summary", tool_input)
 
+    # ---- Fallback heuristic planner ----
     action, tool_input = simple_plan(message)
 
     if action == "retrieve":
-        # retrieval + LLM later; stub for now
         return PlanResult(
             answer=f"(stub) I will retrieve runbook context for: {message}",
             tool_calls=[],
         )
 
-    output = run_tool(action, tool_input or {})
-    return PlanResult(
-        answer=f"(tool) Ran {action}",
-        tool_calls=[{"name": action, "input": tool_input or {}, "output": output}],
-    )
+    return _tool_result(action, tool_input or {})
