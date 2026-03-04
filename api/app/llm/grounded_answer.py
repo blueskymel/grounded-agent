@@ -1,3 +1,4 @@
+import os
 from typing import List
 from app.retrieval.base import RetrievedChunk
 from app.llm.client import get_aoai_client, get_chat_deployment
@@ -124,13 +125,44 @@ def _normalize_bullets(bullets: list[str]) -> str:
     return "\n".join(bullets)
 
 def generate_grounded_answer(question: str, chunks: List[RetrievedChunk]) -> GroundedResult:
+    provider = os.environ.get("LLM_PROVIDER", "aoai").lower().strip()
+
+    if provider == "mock":
+        if not chunks:
+            return GroundedResult(
+                answer="I don't have enough information in the provided runbooks to answer that.",
+                is_refusal=True,
+            )
+
+        lines = []
+        for i, ch in enumerate(chunks[:5], start=1):
+            text = (getattr(ch, "text", "") or "").strip().replace("\n", " ")
+            if not text:
+                continue
+            if len(text) > 200:
+                text = text[:200].rstrip() + "…"
+
+            # numbered citation format
+            lines.append(f"- {text} [{i}]")
+
+        if not lines:
+            return GroundedResult(
+                answer="I don't have enough information in the provided runbooks to answer that.",
+                is_refusal=True,
+            )
+
+        return GroundedResult(
+            answer="\n".join(lines),
+            is_refusal=False,
+        )
+
     # Hard refusal rule: if user asks for SLA/SLO/RTO/RPO, only answer if sources explicitly mention it
     if _SLA_TERMS.search(question) and not _sources_explicitly_define_terms(chunks):
         return GroundedResult(
             answer="I don't have enough information in the provided runbooks to answer that.",
             is_refusal=True,
         )
-    
+
     client = get_aoai_client()
     deployment = get_chat_deployment()
 
@@ -167,7 +199,7 @@ SOURCES:
             answer="I don't have enough information in the provided runbooks to answer that.",
             is_refusal=True,
         )
-    
+
     normalized = _normalize_bullets(bullets)
     aligned = _realign_bullet_citations(normalized, chunks)
 
@@ -180,6 +212,6 @@ SOURCES:
         )
 
     return GroundedResult(
-        answer=aligned, 
+        answer=aligned,
         is_refusal=False,
     )

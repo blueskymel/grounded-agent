@@ -10,6 +10,7 @@ jobs:
     env:
         RETRIEVAL_BACKEND: faiss
         EMBEDDINGS_PROVIDER: mock
+        LLM_PROVIDER: mock
 
     steps:
       - uses: actions/checkout@v4
