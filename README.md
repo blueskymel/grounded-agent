@@ -257,3 +257,130 @@ This enables cost-aware development while supporting production-grade Azure infr
 - Deterministic agent short-circuit path (tool execution before LLM)
 - Unit-tested orchestration paths
 ---
+
+Local Demo Script (5 minutes)
+
+This demonstrates the full GroundedAgent pipeline locally without requiring Azure credentials.
+
+Step 1 — Install Dependencies
+
+From the api directory:
+
+cd api
+
+python -m venv .venv
+
+Windows: .venv\Scripts\activate
+
+macOS / Linux: source .venv/bin/activate
+
+python -m pip install -U pip pip install -r requirements.txt
+
+Step 2 — Build the Local **FAISS** Index
+
+This uses mock embeddings so Azure OpenAI keys are not required.
+
+Windows:
+
+set EMBEDDINGS_PROVIDER=mock python -m ingest.build_faiss_index --input_dir fixtures/raw --out_dir data/index
+
+macOS / Linux:
+
+export EMBEDDINGS_PROVIDER=mock python -m ingest.build_faiss_index --input_dir fixtures/raw --out_dir data/index
+
+Step 3 — Start the **API**
+
+Windows:
+
+set RETRIEVAL_BACKEND=faiss set LLM_PROVIDER=mock uvicorn app.main:app --reload --port **8000**
+
+macOS / Linux:
+
+export RETRIEVAL_BACKEND=faiss export LLM_PROVIDER=mock uvicorn app.main:app --reload --port **8000**
+
+Open the Swagger UI:
+
+[http://**127**.0.0.1:**8000**/docs](http://**127**.0.0.1:**8000**/docs)
+
+### Demo Prompts
+
+These prompts demonstrate **RAG** grounding, refusal safety, and agent tool calls.
+
+Grounded **RAG** Answer
+
+Request message: How do we triage a P1 incident?
+
+Expected behavior:
+
+- Bullet point answer
+- Each bullet ends with a citation such as [doc_id#chunk_id]
+- Citations appear in the response
+
+Refusal Example (Safety)
+
+Request message: What is our **SLA** for P1 response time?
+
+Expected behavior:
+
+- System refuses to answer
+- Citations list is empty
+- Prevents hallucinated answers
+
+Tool Call — Price Change Analysis
+
+Request message: Analyze price change impact for **SKU123** from 12.99 to 11.99
+
+Expected behavior:
+
+- analyze_price_change tool executes
+- Returns structured analysis of price delta and margin impact
+
+Tool Call — Low Stock Triage
+
+Request message: Low stock store **2045** **SKU777** on hand 3
+
+Expected behavior:
+
+- triage_low_stock tool executes
+- Returns priority classification and recommended actions
+
+Tool Call — Promo Compliance
+
+Request message: Check promo compliance promo **PROMO**-99 **SKU123** price 9.99 channel online
+
+Expected behavior:
+
+- check_promo_compliance tool executes
+- Returns compliance status and required approvals
+
+Run the Test Suite
+
+pytest -q
+
+Expected result: all tests passed
+
+The test suite validates:
+
+- intent parsing
+- tool execution
+- retrieval pipeline
+- evaluation harness
+- grounded answer formatting
+
+### Evaluation Harness
+
+GroundedAgent includes an evaluation harness to verify **RAG** quality.
+
+Run:
+
+python -m eval.run_eval
+
+Example output:
+
+=== GroundedAgent Eval Summary === Cases: 6 Recall@5 hit rate: **100**% Format compliance: **100**% Refusal correctness: **100**%
+
+This ensures the system maintains:
+
+- retrieval accuracy
+- citation correctness
+- safe refusal behavior
