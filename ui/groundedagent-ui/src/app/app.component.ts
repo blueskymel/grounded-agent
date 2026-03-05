@@ -29,8 +29,12 @@ import { ChangeDetectorRef } from '@angular/core';
     </div>
 
     <div class="input">
-      <input [(ngModel)]="draft" placeholder="Ask something..." />
-      <button (click)="send()">Send</button>
+        <input
+        [(ngModel)]="draft"
+        placeholder="Ask something..."
+        (keydown.enter)="onEnter($event)"
+        />
+        <button (click)="send()" [disabled]="isSending">Send</button>
     </div>
 
   </div>
@@ -59,6 +63,10 @@ import { ChangeDetectorRef } from '@angular/core';
 </div>
   `,
   styles: [`
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
 
 .chat{
 flex:1;
@@ -144,23 +152,41 @@ export class AppComponent implements OnInit {
 
   toolCalls:any[] = []
 
- constructor(private api: ApiService, private cdr: ChangeDetectorRef) {}
+  isSending = false
+
+  constructor(private api: ApiService, private cdr: ChangeDetectorRef) {}
 
   ngOnInit(){}
 
-  send() {
-    const msg = this.draft.trim();
-    if (!msg) return;
+onEnter(event: Event) {
+  event.preventDefault()
+  if (!this.isSending) {
+    this.send()
+  }
+}
 
-    this.messages = [...this.messages, { role: 'user', text: msg }];
-    this.draft = '';
+send() {
 
-    this.api.chat(msg).subscribe((res: ChatResponse) => {
-    this.messages = [...this.messages, { role: 'assistant', text: res.answer }];
-    this.citations = res.citations ?? [];
-    this.toolCalls = res.tool_calls ?? [];
-    this.cdr.detectChanges();
-    });
+  const msg = this.draft.trim()
+  if (!msg || this.isSending) return
 
- }
+  this.isSending = true
+
+  this.messages = [...this.messages, { role:'user', text: msg }]
+  this.draft = ''
+
+  this.api.chat(msg).subscribe((res:ChatResponse)=>{
+
+    this.messages = [...this.messages, { role:'assistant', text: res.answer }]
+
+    this.citations = res.citations ?? []
+    this.toolCalls = res.tool_calls ?? []
+
+    this.isSending = false
+
+  }, () => {
+    this.isSending = false
+  })
+
+}
 }
