@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from app.llm.grounded_answer import generate_grounded_answer
 from fastapi import FastAPI
 from fastapi import Request, HTTPException
+from fastapi import Response
 from app.core.config import settings
 from app.schemas.chat import ChatRequest, ChatResponse, Citation, ToolCall
 from app.retrieval.factory import get_retriever
@@ -86,10 +87,12 @@ def health():
     }
 
 @app.get("/kb", response_model=list[DocSummary])
-def list_docs():
+def list_docs(response: Response):
+    # Cache hint for browsers/proxies (still safe)
+    response.headers["Cache-Control"] = "public, max-age=30"
+
     if settings.retrieval_backend == "azure_search":
         return azure_search_doc_stats()
-
     return faiss_doc_stats()
 
 @app.post("/chat", response_model=ChatResponse)

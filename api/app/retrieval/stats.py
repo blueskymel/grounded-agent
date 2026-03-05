@@ -2,12 +2,19 @@ import json
 import os
 from collections import Counter
 from pathlib import Path
+from app.core.cache import cached
+
+def faiss_doc_stats():
+    return cached("kb:faiss_doc_stats", ttl_seconds=30, fn=_faiss_doc_stats_uncached)
+
+def azure_search_doc_stats():
+    return cached("kb:azure_search_doc_stats", ttl_seconds=30, fn=_azure_search_doc_stats_uncached)
 
 
 # -------------------------
 # FAISS mode
 # -------------------------
-def faiss_doc_stats(index_dir: str = "data/index") -> list[dict]:
+def _faiss_doc_stats_uncached(index_dir: str = "data/index") -> list[dict]:
     chunks_path = Path(index_dir) / "chunks.jsonl"
     if not chunks_path.exists():
         return []
@@ -28,7 +35,7 @@ def faiss_doc_stats(index_dir: str = "data/index") -> list[dict]:
 # -------------------------
 # Azure AI Search mode
 # -------------------------
-def azure_search_doc_stats() -> list[dict]:
+def _azure_search_doc_stats_uncached() -> list[dict]:
     from azure.core.credentials import AzureKeyCredential
     from azure.search.documents import SearchClient
 
