@@ -1,9 +1,8 @@
-import { Component, OnInit } from '@angular/core'
+import { Component, OnInit, ElementRef, ViewChild, ChangeDetectorRef } from '@angular/core'
 import { CommonModule } from '@angular/common'
 import { FormsModule } from '@angular/forms'
 import { ApiService } from './api.service'
 import { ChatResponse } from './api.types'
-import { ChangeDetectorRef } from '@angular/core';
 
 @Component({
   selector: 'app-root',
@@ -14,7 +13,7 @@ import { ChangeDetectorRef } from '@angular/core';
 <aside class="sidebar">
   <div class="chat">
 
-    <div class="messages">
+    <div class="messages" #messagesEl>
 
       <div *ngFor="let m of messages">
         <div class="user" *ngIf="m.role==='user'">
@@ -23,6 +22,14 @@ import { ChangeDetectorRef } from '@angular/core';
 
         <div class="assistant" *ngIf="m.role==='assistant'">
           <pre>{{m.text}}</pre>
+
+          <div *ngIf="m.citations?.length">
+            <small>Citations:</small>
+            <div *ngFor="let c of m.citations">
+              {{c.doc_id}}#{{c.chunk_id}}
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -58,6 +65,23 @@ import { ChangeDetectorRef } from '@angular/core';
       <div>{{c.snippet}}</div>
     </div>
 
+    <h3>Retrieval Debug</h3>
+
+    <div *ngIf="timings">
+      <div><b>retrieval_ms:</b> {{timings.retrieval_ms}}</div>
+      <div><b>embed_ms:</b> {{timings.embed_ms}}</div>
+      <div><b>search_ms:</b> {{timings.search_ms}}</div>
+      <div><b>llm_ms:</b> {{timings.llm_ms}}</div>
+      <div><b>total_ms:</b> {{timings.total_ms}}</div>
+    </div>
+
+    <div *ngIf="retrievedChunks?.length">
+      <h4>Top Chunks</h4>
+      <div *ngFor="let rc of retrievedChunks" style="margin-bottom:10px;">
+        <div><b>{{rc.doc_id}}#{{rc.chunk_id}}</b></div>
+        <div *ngIf="rc.score !== undefined">score: {{rc.score | number:'1.2-3'}}</div>
+      </div>
+    </div>    
   </div>
 </main>
 </div>
@@ -77,6 +101,7 @@ padding:20px;
 
 .messages{
 flex:1;
+min-height:0;
 overflow:auto;
 }
 
@@ -144,6 +169,20 @@ overflow:auto;
 })
 export class AppComponent implements OnInit {
 
+  @ViewChild('messagesEl', { static: false })
+  messagesEl!: ElementRef<HTMLDivElement>
+
+  private scrollToBottom() {
+
+    requestAnimationFrame(() => {
+      const el = this.messagesEl?.nativeElement
+      if (!el) return
+
+      el.scrollTop = el.scrollHeight
+    })
+
+  }
+
   draft = ''
 
   messages:any[] = []
@@ -151,6 +190,10 @@ export class AppComponent implements OnInit {
   citations:any[] = []
 
   toolCalls:any[] = []
+
+  retrievedChunks: any[] = []
+
+  timings: any = null
 
   isSending = false
 
@@ -166,27 +209,76 @@ onEnter(event: Event) {
 }
 
 send() {
-
   const msg = this.draft.trim()
   if (!msg || this.isSending) return
 
   this.isSending = true
 
-  this.messages = [...this.messages, { role:'user', text: msg }]
+  // add user message
+  this.messages = [...this.messages, { role: 'user', text: msg }]
+  this.scrollToBottom()
+
   this.draft = ''
 
-  this.api.chat(msg).subscribe((res:ChatResponse)=>{
+  // add temporary assistant message
+  const thinkingMsg = {
+    role: 'assistant',
+    text: 'Thinking…',
+    pending: true
+  }
 
-    this.messages = [...this.messages, { role:'assistant', text: res.answer }]
+  this.messages = [...this.messages, thinkingMsg]
+  this.scrollToBottom()
 
-    this.citations = res.citations ?? []
-    this.toolCalls = res.tool_calls ?? []
+  this.api.chat(msg).subscribe({
+    next: (res: ChatResponse) => {
+      const idx = this.messages.indexOf(thinkingMsg)
 
-    this.isSending = false
+      const assistantMsg = {
+        role: 'assistant',
+        text: res.answer,
+        citations: res.citations ?? [],
+        toolCalls: res.tool_calls ?? []
+      }
 
-  }, () => {
-    this.isSending = false
+      if (idx >= 0) {
+        this.messages[idx] = assistantMsg
+        this.messages = [...this.messages]
+      } else {
+        this.messages = [...this.messages, assistantMsg]
+      }
+
+      // keep right-hand panel working
+      this.citations = res.citations ?? []
+      this.toolCalls = res.tool_calls ?? []
+
+      this.retrievedChunks = res.retrieved_chunks ?? []
+      this.timings = res.timings ?? null      
+
+      this.isSending = false
+      this.scrollToBottom()
+      this.cdr.detectChanges()
+    },
+
+    error: () => {
+      const idx = this.messages.indexOf(thinkingMsg)
+
+      const errorMsg = {
+        role: 'assistant',
+        text: 'Error: request failed.'
+      }
+
+      if (idx >= 0) {
+        this.messages[idx] = errorMsg
+        this.messages = [...this.messages]
+      } else {
+        this.messages = [...this.messages, errorMsg]
+      }
+
+      this.isSending = false
+      this.scrollToBottom()
+      this.cdr.detectChanges()
+    }
   })
-
 }
 }

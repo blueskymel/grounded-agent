@@ -13,11 +13,27 @@ export interface ToolCall {
   output?: any
 }
 
+export interface RetrievedChunkDebug {
+  doc_id: string
+  chunk_id: string
+  score?: number
+}
+
+export interface TimingInfo {
+  retrieval_ms: number
+  embed_ms: number
+  search_ms: number
+  llm_ms: number
+  total_ms: number
+}
+
 export interface ChatResponse {
   answer: string
   citations: Citation[]
   tool_calls: ToolCall[]
   retrieval_backend: string
+  timings?: TimingInfo
+  retrieved_chunks?: RetrievedChunkDebug[]
 }
 
 export interface HealthResponse {

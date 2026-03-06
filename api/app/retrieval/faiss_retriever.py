@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import time
 import hashlib
 import json
 import os
@@ -30,6 +30,8 @@ def _mock_embed(text: str, dim: int) -> np.ndarray:
 
 class FaissRetriever(Retriever):
     def __init__(self, index_dir: str = "data/index"):
+        self.last_embed_ms = 0
+        self.last_search_ms = 0
         self.index_dir = Path(index_dir)
         self.index_path = self.index_dir / "faiss.index"
         self.chunks_path = self.index_dir / "chunks.jsonl"
@@ -72,6 +74,15 @@ class FaissRetriever(Retriever):
         return chunks
 
     def _embed_query(self, text: str) -> np.ndarray:
+        t0 = time.perf_counter()
+
+        resp = self.client.embeddings.create(
+            model=self.embedding_model,
+            input=text,
+        )
+
+        self.last_embed_ms = int((time.perf_counter() - t0) * 1000)
+
         if self.provider == "mock":
             if self.dim <= 0:
                 raise ValueError("FAISS index has invalid dimension (d <= 0).")
@@ -95,18 +106,21 @@ class FaissRetriever(Retriever):
         if not q:
             return []
 
-        qvec = self._embed_query(q).reshape(1, -1)
+        import time
 
-        # Search FAISS
+        t0 = time.perf_counter()
+        qvec = self._embed_query(q).reshape(1, -1)
+        self.last_embed_ms = int((time.perf_counter() - t0) * 1000)
+
+        t1 = time.perf_counter()
         distances, indices = self.index.search(qvec, top_k)
+        self.last_search_ms = int((time.perf_counter() - t1) * 1000)
 
         results: list[RetrievedChunk] = []
         for rank, idx in enumerate(indices[0]):
             if idx < 0 or idx >= len(self.chunks):
                 continue
             meta = self.chunks[idx]
-
-            # Convert distance to a "score" (heuristic: lower distance -> higher score)
             dist = float(distances[0][rank])
             score = 1.0 / (1.0 + dist)
 
