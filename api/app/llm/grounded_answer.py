@@ -1,5 +1,5 @@
 import os
-from typing import List
+from typing import List, Iterator
 from app.retrieval.base import RetrievedChunk
 from app.llm.client import get_aoai_client, get_chat_deployment
 from dataclasses import dataclass
@@ -227,3 +227,56 @@ SOURCES:
         answer=aligned,
         is_refusal=False,
     )
+
+def stream_grounded_answer(question: str, chunks: List[RetrievedChunk]) -> Iterator[str]:
+    provider = os.environ.get("LLM_PROVIDER", "aoai").lower().strip()
+
+    refusal_text = "I don't have enough information in the provided runbooks to answer that."
+
+    # Same refusal rule as non-streaming path
+    if _SLA_TERMS.search(question) and not _sources_explicitly_define_terms(chunks):
+        yield refusal_text
+        return
+
+    if provider == "mock":
+        # Mock mode cannot do real token streaming from a model,
+        # so we stream the already-generated answer word by word.
+        result = generate_grounded_answer(question, chunks)
+        answer = result.answer if hasattr(result, "answer") else str(result)
+        for word in answer.split():
+            yield word + " "
+        return
+
+    if not is_answerable(question, chunks):
+        yield refusal_text
+        return
+
+    client = get_aoai_client()
+    deployment = get_chat_deployment()
+    sources_text = build_sources(chunks)
+
+    user_prompt = f"""QUESTION:
+{question}
+
+SOURCES:
+{sources_text}
+"""
+
+    stream = client.chat.completions.create(
+        model=deployment,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.2,
+        max_tokens=400,
+        stream=True,
+    )
+
+    for chunk in stream:
+        if not chunk.choices:
+            continue
+
+        delta = chunk.choices[0].delta.content
+        if delta:
+            yield delta    

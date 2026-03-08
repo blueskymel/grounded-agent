@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 
 from fastapi import FastAPI, Request, HTTPException, Response
-from app.llm.grounded_answer import generate_grounded_answer
+from app.llm.grounded_answer import generate_grounded_answer, stream_grounded_answer
 from app.core.config import settings
 from app.schemas.chat import ChatRequest, ChatResponse, Citation, ToolCall
 from app.retrieval.factory import get_retriever
@@ -18,7 +18,9 @@ import uuid
 from app.observability.logger import log_event
 from app.observability.errors import format_exception
 from app.observability.tools import summarize_tool_calls
-
+from fastapi.responses import StreamingResponse
+import json
+import asyncio
 
 load_dotenv()
 
@@ -268,3 +270,29 @@ def chat(req: ChatRequest, request: Request):
         )
 
         raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.post("/chat/stream")
+async def chat_stream(req: ChatRequest):
+    async def event_stream():
+        retriever = get_retriever()
+        chunks = retriever.retrieve(req.message, top_k=5)
+
+        if not chunks:
+            yield f"data: {json.dumps({'type': 'error', 'message': 'No documents'})}\n\n"
+            return
+
+        for token in stream_grounded_answer(req.message, chunks):
+            yield f"data: {json.dumps({'type': 'token', 'value': token})}\n\n"
+            await asyncio.sleep(0)
+
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

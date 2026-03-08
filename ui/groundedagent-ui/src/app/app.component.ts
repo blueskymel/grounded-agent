@@ -75,7 +75,7 @@ import { ChatResponse } from './api.types'
       <div><b>total_ms:</b> {{timings.total_ms}}</div>
     </div>
 
-    <div *ngIf="retrievedChunks?.length">
+    <div *ngIf="retrievedChunks.length">
       <h4>Top Chunks</h4>
       <div *ngFor="let rc of retrievedChunks" style="margin-bottom:10px;">
         <div><b>{{rc.doc_id}}#{{rc.chunk_id}}</b></div>
@@ -280,5 +280,38 @@ send() {
       this.cdr.detectChanges()
     }
   })
+}
+
+sendStream() {
+
+  const msg = this.draft.trim()
+  if (!msg || this.isSending) return
+
+  this.isSending = true
+
+  this.messages = [...this.messages,{role:'user',text:msg}]
+  this.draft = ''
+
+  const assistantMsg = {
+    role:'assistant',
+    text:''
+  }
+
+  this.messages = [...this.messages, assistantMsg]
+
+  this.api.streamChat(msg,
+
+    (token:string)=>{
+      assistantMsg.text += token + " "
+      this.messages = [...this.messages]
+      this.scrollToBottom()
+    },
+
+    ()=>{
+      this.isSending = false
+    }
+
+  )
+
 }
 }
