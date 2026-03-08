@@ -106,7 +106,7 @@ def chat(req: ChatRequest, request: Request):
     retrieval_ms = 0
     embed_ms = 0
     search_ms = 0
-    refused = False
+    #refused = False
 
     citations: list[Citation] = []
     tool_calls_out: list[ToolCall] = []
@@ -198,12 +198,24 @@ def chat(req: ChatRequest, request: Request):
 
             llm_ms = int((time.perf_counter() - t_llm0) * 1000)
 
-            answer = result.answer
-            refused = bool(getattr(result, "is_refusal", False))
+            # Support both GroundedResult objects and dict-returning mock mode
+            if hasattr(result, "answer"):
+                answer = result.answer
+                refused = bool(getattr(result, "is_refusal", False))
+            elif isinstance(result, dict):
+                answer = result.get("answer", "")
+                refused = bool(result.get("refused", False) or result.get("is_refusal", False))
+            else:
+                answer = str(result)
+                refused = False
 
+            if refused:
+                citations = []
+                top_chunks = []
         else:
 
             answer = "I don't have any indexed runbooks yet. Upload/ingest documents first."
+            refused = False
 
         total_ms = int((time.perf_counter() - t_total0) * 1000)
 

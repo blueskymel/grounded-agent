@@ -50,7 +50,7 @@ class FaissRetriever(Retriever):
         # Embeddings provider:
         # - "aoai" (default) uses Azure OpenAI query embeddings
         # - "mock" uses deterministic local embeddings (CI-friendly, no secrets)
-        self.provider = os.environ.get("EMBEDDINGS_PROVIDER", "aoai").lower().strip()
+        self.provider = os.environ.get("EMBEDDINGS_PROVIDER", "mock").lower().strip()
 
         self.client = None
         self.embedding_model = None
@@ -76,19 +76,16 @@ class FaissRetriever(Retriever):
     def _embed_query(self, text: str) -> np.ndarray:
         t0 = time.perf_counter()
 
-        resp = self.client.embeddings.create(
-            model=self.embedding_model,
-            input=text,
-        )
-
-        self.last_embed_ms = int((time.perf_counter() - t0) * 1000)
-
+        # --- MOCK path (CI / offline)
         if self.provider == "mock":
             if self.dim <= 0:
                 raise ValueError("FAISS index has invalid dimension (d <= 0).")
-            return _mock_embed(text, self.dim)
 
-        # AOAI path
+            vec = _mock_embed(text, self.dim)
+            self.last_embed_ms = int((time.perf_counter() - t0) * 1000)
+            return vec
+
+        # --- AOAI path
         if self.client is None or self.embedding_model is None:
             raise RuntimeError(
                 "AOAI embeddings selected but client/model not configured. "
@@ -99,6 +96,9 @@ class FaissRetriever(Retriever):
             model=self.embedding_model,
             input=text,
         )
+
+        self.last_embed_ms = int((time.perf_counter() - t0) * 1000)
+
         return np.array(resp.data[0].embedding, dtype="float32")
 
     def retrieve(self, query: str, top_k: int = 5) -> list[RetrievedChunk]:
