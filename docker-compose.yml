@@ -1,0 +1,24 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: dev
+      RETRIEVAL_BACKEND: faiss
+      EMBEDDINGS_PROVIDER: mock
+      LLM_PROVIDER: mock
+    volumes:
+      - ./api/data:/app/data
+      - ./api/logs:/app/logs
+
+  ui:
+    build:
+      context: .
+      dockerfile: docker/ui.Dockerfile
+    ports:
+      - "4200:80"
+    depends_on:
+      - api
