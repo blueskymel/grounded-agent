@@ -562,5 +562,6 @@ This repo now includes a parallel Azure Functions hosting scaffold for the same 
 - Hosting switch in root infra template: `infra/main.bicep` (`hostingModel=functions`)
 - Function runtime entrypoint: `functionapp/function_app.py`
 - Deployment guide: [docs/deploy-functions.md](docs/deploy-functions.md)
+- CI deploy workflow: `.github/workflows/functions-deploy.yml` (manual dispatch)
 
 This keeps the existing Container Apps path as the default while providing a production-shaped Functions option for event-driven/serverless hosting requirements.

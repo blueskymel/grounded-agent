@@ -1,0 +1,67 @@
+name: Functions Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      resource_group:
+        description: "Target resource group name"
+        required: true
+        type: string
+      function_app_name:
+        description: "Target Function App name"
+        required: true
+        type: string
+      run_smoke_test:
+        description: "Run /api/health check after deployment"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build function deployment package
+        run: |
+          set -euxo pipefail
+          rm -rf .funcpkg
+          mkdir -p .funcpkg
+          cp functionapp/host.json .funcpkg/
+          cp functionapp/function_app.py .funcpkg/
+          cp functionapp/requirements.txt .funcpkg/
+          cp -R api .funcpkg/api
+          (cd .funcpkg && zip -r grounded-agent-function.zip .)
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy zip package to Function App
+        run: |
+          az functionapp deployment source config-zip \
+            --resource-group "${{ inputs.resource_group }}" \
+            --name "${{ inputs.function_app_name }}" \
+            --src ".funcpkg/grounded-agent-function.zip"
+
+      - name: Smoke test
+        if: ${{ inputs.run_smoke_test }}
+        run: |
+          set -euxo pipefail
+          base_url="https://${{ inputs.function_app_name }}.azurewebsites.net"
+          curl --fail --show-error --silent "${base_url}/api/health"

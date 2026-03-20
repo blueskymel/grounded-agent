@@ -86,3 +86,26 @@ curl "$base/api/kb"
 - Default function auth level is `FUNCTION`; calls require a function key unless changed.
 - This scaffold preserves the existing FastAPI app and endpoints under the Functions `/api` route prefix.
 - The current `azd` service in `azure.yaml` still targets Container Apps. Functions deployment is provided through this Bicep + zip path.
+
+## GitHub Actions deployment workflow
+
+This repo now includes `.github/workflows/functions-deploy.yml` for manual (workflow_dispatch) Function App deployment.
+
+Inputs:
+
+- `resource_group`
+- `function_app_name`
+- `run_smoke_test` (default `true`)
+
+Required repository secrets for Azure OIDC login:
+
+- `AZURE_CLIENT_ID`
+- `AZURE_TENANT_ID`
+- `AZURE_SUBSCRIPTION_ID`
+
+The workflow:
+
+1. Packages `functionapp/` plus `api/` into a zip.
+2. Logs into Azure via `azure/login@v2` using OIDC.
+3. Runs `az functionapp deployment source config-zip`.
+4. Optionally verifies `GET /api/health`.
