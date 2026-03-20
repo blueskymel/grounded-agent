@@ -22,5 +22,8 @@ class Settings(BaseSettings):
     azure_search_api_key: str | None = None
     azure_search_index_name: str = "groundedagent-chunks"
 
+    # Azure Monitor / Application Insights
+    applicationinsights_connection_string: str | None = None
+
 
 settings = Settings()

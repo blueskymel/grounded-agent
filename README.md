@@ -95,7 +95,7 @@ This structure mirrors real-world enterprise AI systems where:
 - **Storage**:
   - Azure Blob Storage for documents + artifacts
 - **Observability**:
-  - Application Insights (traces, latency, failures)
+  - Application Insights (optional telemetry export for traces, latency, failures)
 
 ---
 
@@ -143,6 +143,21 @@ flowchart LR
 From the `api/` directory:
 
 ```bash
+python -m uvicorn app.main:app --reload --app-dir .
+```
+
+Optional: enable Application Insights export
+
+Windows:
+
+```powershell
+set APPLICATIONINSIGHTS_CONNECTION_STRING=InstrumentationKey=...;IngestionEndpoint=https://... python -m uvicorn app.main:app --reload --app-dir .
+```
+
+macOS / Linux:
+
+```bash
+export APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=...;IngestionEndpoint=https://..."
 python -m uvicorn app.main:app --reload --app-dir .
 ```
 

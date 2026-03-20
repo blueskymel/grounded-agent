@@ -18,6 +18,7 @@ import uuid
 from app.observability.logger import log_event
 from app.observability.errors import format_exception
 from app.observability.tools import summarize_tool_calls
+from app.observability.app_insights import init_app_insights
 from fastapi.responses import StreamingResponse
 import json
 import asyncio
@@ -50,6 +51,8 @@ logging.getLogger("azure").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("openai").setLevel(logging.WARNING)
 
+# Optional telemetry export. No-op when connection string is not set.
+init_app_insights(settings.applicationinsights_connection_string)
 
 app = FastAPI(title="GroundedAgent API", version="0.1.0")
 
