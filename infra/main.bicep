@@ -17,6 +17,13 @@ param location string
 @description('Container image to deploy. azd sets this after build+push.')
 param containerImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
+@allowed([
+  'containerapp'
+  'functions'
+])
+@description('Primary hosting model for the API workload.')
+param hostingModel string = 'containerapp'
+
 @description('Azure OpenAI endpoint URL.')
 param azureOpenAiEndpoint string = ''
 
@@ -78,7 +85,7 @@ resource rg 'Microsoft.Resources/resourceGroups@2021-04-01' = {
 }
 
 // ------ App Module -----------------------------------------------------------
-module app './azure/container-app.bicep' = {
+module app './azure/container-app.bicep' = if (hostingModel == 'containerapp') {
   name: 'grounded-agent-app'
   scope: rg
   params: {
@@ -100,6 +107,27 @@ module app './azure/container-app.bicep' = {
   }
 }
 
+module func './azure/function-app.bicep' = if (hostingModel == 'functions') {
+  name: 'grounded-agent-functions'
+  scope: rg
+  params: {
+    location: location
+    environmentName: environmentName
+    azureOpenAiEndpoint: azureOpenAiEndpoint
+    azureOpenAiApiKey: azureOpenAiApiKey
+    azureOpenAiChatDeployment: azureOpenAiChatDeployment
+    azureOpenAiEmbeddingsDeployment: azureOpenAiEmbeddingsDeployment
+    azureSearchEndpoint: azureSearchEndpoint
+    azureSearchApiKey: azureSearchApiKey
+    azureSearchIndexName: azureSearchIndexName
+    appInsightsConnectionString: appInsightsConnectionString
+  }
+}
+
+var backendFqdn = hostingModel == 'containerapp'
+  ? any(app).outputs.containerAppFqdn
+  : any(func).outputs.functionAppHostname
+
 // ------ APIM Module (optional) ----------------------------------------------
 module apimModule './azure/apim.bicep' = if (deployApim) {
   name: 'grounded-agent-apim'
@@ -108,16 +136,17 @@ module apimModule './azure/apim.bicep' = if (deployApim) {
     location: location
     publisherEmail: publisherEmail
     publisherName: publisherName
-    containerAppFqdn: app.outputs.containerAppFqdn
+    backendFqdn: backendFqdn
   }
 }
 
 // ------ Outputs (azd reads these to wire up the service) --------------------
-output AZURE_CONTAINER_REGISTRY_ENDPOINT string = app.outputs.registryLoginServer
-output AZURE_CONTAINER_REGISTRY_NAME     string = app.outputs.registryName
-output SERVICE_API_URI                   string = deployApim ? any(apimModule).outputs.apimGatewayUrl : 'https://${app.outputs.containerAppFqdn}'
-output SERVICE_API_CONTAINER_APP_NAME    string = app.outputs.containerAppName
+output AZURE_CONTAINER_REGISTRY_ENDPOINT string = hostingModel == 'containerapp' ? any(app).outputs.registryLoginServer : ''
+output AZURE_CONTAINER_REGISTRY_NAME     string = hostingModel == 'containerapp' ? any(app).outputs.registryName : ''
+output SERVICE_API_URI                   string = deployApim ? any(apimModule).outputs.apimGatewayUrl : 'https://${backendFqdn}'
+output SERVICE_API_CONTAINER_APP_NAME    string = hostingModel == 'containerapp' ? any(app).outputs.containerAppName : ''
+output SERVICE_API_FUNCTION_APP_NAME     string = hostingModel == 'functions' ? any(func).outputs.functionAppName : ''
 output APIM_GATEWAY_URL                  string = deployApim ? any(apimModule).outputs.apimGatewayUrl : ''
-output KEY_VAULT_NAME                    string = app.outputs.keyVaultName
-output KEY_VAULT_URL                     string = app.outputs.keyVaultUrl
+output KEY_VAULT_NAME                    string = hostingModel == 'containerapp' ? any(app).outputs.keyVaultName : ''
+output KEY_VAULT_URL                     string = hostingModel == 'containerapp' ? any(app).outputs.keyVaultUrl : ''
 output RESOURCE_GROUP_NAME               string = rg.name

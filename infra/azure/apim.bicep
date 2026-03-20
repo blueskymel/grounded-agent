@@ -15,8 +15,8 @@ param publisherEmail string
 @description('Publisher organisation display name.')
 param publisherName string = 'GroundedAgent'
 
-@description('FQDN of the Container App, without scheme (e.g. ca-grounded-agent.bluesky.azurecontainerapps.io).')
-param containerAppFqdn string
+@description('FQDN of the backend API target, without scheme (for example Container App or Function App hostname).')
+param backendFqdn string
 
 // ------ Naming ---------------------------------------------------------------
 var suffix   = take(uniqueString(resourceGroup().id), 8)
@@ -36,12 +36,12 @@ resource apim 'Microsoft.ApiManagement/service@2022-08-01' = {
   }
 }
 
-// ------ Backend (Container App) ----------------------------------------------
+// ------ Backend --------------------------------------------------------------
 resource backend 'Microsoft.ApiManagement/service/backends@2022-08-01' = {
   parent: apim
-  name: 'grounded-agent-aca'
+  name: 'grounded-agent-backend'
   properties: {
-    url: 'https://${containerAppFqdn}'
+    url: 'https://${backendFqdn}'
     protocol: 'http'
     tls: {
       validateCertificateChain: true
@@ -73,7 +73,7 @@ resource api 'Microsoft.ApiManagement/service/apis@2022-08-01' = {
     subscriptionRequired: true
     path: ''
     protocols: ['https']
-    serviceUrl: 'https://${containerAppFqdn}'
+    serviceUrl: 'https://${backendFqdn}'
     subscriptionKeyParameterNames: {
       header: 'Ocp-Apim-Subscription-Key'
       query: 'subscription-key'

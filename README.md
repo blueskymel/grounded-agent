@@ -553,3 +553,14 @@ az deployment sub create \
 ```
 
 Full step-by-step instructions, environment variable reference, and post-deploy checks: [docs/deploy-aca.md](docs/deploy-aca.md)
+
+## Azure Functions Hosting Scaffold
+
+This repo now includes a parallel Azure Functions hosting scaffold for the same FastAPI app using `AsgiFunctionApp`.
+
+- Infra module: `infra/azure/function-app.bicep`
+- Hosting switch in root infra template: `infra/main.bicep` (`hostingModel=functions`)
+- Function runtime entrypoint: `functionapp/function_app.py`
+- Deployment guide: [docs/deploy-functions.md](docs/deploy-functions.md)
+
+This keeps the existing Container Apps path as the default while providing a production-shaped Functions option for event-driven/serverless hosting requirements.

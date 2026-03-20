@@ -1,0 +1,88 @@
+# Deploy GroundedAgent to Azure Functions
+
+This guide adds an Azure Functions hosting option for the existing FastAPI app by using `azure.functions.AsgiFunctionApp`.
+
+## What this scaffold includes
+
+- Bicep module: `infra/azure/function-app.bicep`
+- Hosting switch: `infra/main.bicep` with `hostingModel=functions`
+- Function entrypoint: `functionapp/function_app.py`
+- Function runtime config: `functionapp/host.json`
+
+## Prerequisites
+
+- Azure CLI logged in (`az login`)
+- Azure Functions Core Tools (for local test, optional)
+- Python 3.11
+
+## 1. Provision Azure resources
+
+Use the same top-level Bicep but switch hosting model:
+
+```powershell
+$ENV_NAME = "grounded-dev"
+$LOCATION = "australiaeast"
+
+az deployment sub create `
+  --name "grounded-agent-func-infra" `
+  --location $LOCATION `
+  --template-file infra/main.bicep `
+  --parameters `
+      environmentName=$ENV_NAME `
+      location=$LOCATION `
+      hostingModel=functions `
+      azureOpenAiEndpoint=$env:AZURE_OPENAI_ENDPOINT `
+      azureOpenAiApiKey=$env:AZURE_OPENAI_API_KEY `
+      azureOpenAiChatDeployment=$env:AZURE_OPENAI_CHAT_DEPLOYMENT `
+      azureOpenAiEmbeddingsDeployment=$env:AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT `
+      azureSearchEndpoint=$env:AZURE_SEARCH_ENDPOINT `
+      azureSearchApiKey=$env:AZURE_SEARCH_API_KEY `
+      azureSearchIndexName=$env:AZURE_SEARCH_INDEX_NAME
+```
+
+Get outputs:
+
+```powershell
+$RG = az deployment sub show --name grounded-agent-func-infra --query "properties.outputs.RESOURCE_GROUP_NAME.value" -o tsv
+$FUNC = az deployment sub show --name grounded-agent-func-infra --query "properties.outputs.SERVICE_API_FUNCTION_APP_NAME.value" -o tsv
+```
+
+## 2. Build a deployment package
+
+Create a zip where `host.json` and `function_app.py` are at package root and `api/` is included for imports.
+
+```powershell
+$pkgRoot = Join-Path $PWD ".funcpkg"
+if (Test-Path $pkgRoot) { Remove-Item $pkgRoot -Recurse -Force }
+New-Item -ItemType Directory -Path $pkgRoot | Out-Null
+
+Copy-Item functionapp\host.json $pkgRoot
+Copy-Item functionapp\function_app.py $pkgRoot
+Copy-Item functionapp\requirements.txt $pkgRoot
+Copy-Item api (Join-Path $pkgRoot "api") -Recurse
+
+Compress-Archive -Path "$pkgRoot\*" -DestinationPath "$pkgRoot\grounded-agent-function.zip" -Force
+```
+
+## 3. Deploy code to the Function App
+
+```powershell
+az functionapp deployment source config-zip `
+  --resource-group $RG `
+  --name $FUNC `
+  --src "$pkgRoot\grounded-agent-function.zip"
+```
+
+## 4. Verify
+
+```powershell
+$base = "https://$FUNC.azurewebsites.net"
+curl "$base/api/health"
+curl "$base/api/kb"
+```
+
+## Notes
+
+- Default function auth level is `FUNCTION`; calls require a function key unless changed.
+- This scaffold preserves the existing FastAPI app and endpoints under the Functions `/api` route prefix.
+- The current `azd` service in `azure.yaml` still targets Container Apps. Functions deployment is provided through this Bicep + zip path.
