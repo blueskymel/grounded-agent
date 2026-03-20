@@ -433,6 +433,27 @@ This repo also includes an Azure DevOps equivalent for teams using Azure-native 
 
 This mirrors the GitHub Actions gate so quality checks are consistent across CI platforms.
 
+### Azure ML Eval Job (Optional)
+
+For teams that want managed MLOps job history in Azure ML, this repo includes a minimal submission script:
+
+- Script: `python -m eval.submit_azureml_eval_job`
+- Behavior: installs dependencies, rebuilds fixture FAISS index, runs eval, applies eval thresholds, uploads `eval/report.json` as a job output artifact
+
+Required environment variables:
+
+```powershell
+$env:AZURE_SUBSCRIPTION_ID = "<subscription-guid>"
+$env:AZURE_ML_RESOURCE_GROUP = "<resource-group>"
+$env:AZURE_ML_WORKSPACE_NAME = "<workspace-name>"
+```
+
+Optional arguments:
+
+```powershell
+python -m eval.submit_azureml_eval_job --compute cpu-cluster --experiment grounded-agent-eval --limit 25
+```
+
 ### Foundry-Backed Evaluation Workflow
 
 This repo now includes an optional Azure AI Foundry evaluation path that reuses the existing local QA dataset instead of inventing a separate benchmark.
@@ -463,6 +484,30 @@ python -m eval.run_foundry_eval --refresh-dataset
 ```
 
 The script writes `eval/foundry_eval_results.json` locally and, when a Foundry project endpoint is configured, also logs the run to Foundry for history and comparison.
+
+### Hosted Foundry Agent Runtime Path (Optional)
+
+In addition to Foundry evaluation, this repo now supports a hosted Foundry agent execution path at runtime.
+
+- Toggle with env var: `AGENT_FRAMEWORK=foundry`
+- Dispatch point: `api/app/core/agent.py`
+- Hosted agent adapter: `api/app/core/agent_foundry.py`
+
+Required environment variables for hosted-agent mode:
+
+```powershell
+$env:AZURE_AI_PROJECT_ENDPOINT = "https://<resource>.services.ai.azure.com/api/projects/<project>"
+$env:FOUNDRY_AGENT_ID = "<agent-id>"
+```
+
+Optional tuning:
+
+```powershell
+$env:FOUNDRY_AGENT_TIMEOUT_SECONDS = "90"
+$env:FOUNDRY_AGENT_POLL_SECONDS = "2"
+```
+
+If hosted-agent dependencies/config are missing, the API returns a safe fallback answer instead of crashing.
 
 ### Managed Identity + Key Vault
 
@@ -563,5 +608,11 @@ This repo now includes a parallel Azure Functions hosting scaffold for the same 
 - Function runtime entrypoint: `functionapp/function_app.py`
 - Deployment guide: [docs/deploy-functions.md](docs/deploy-functions.md)
 - CI deploy workflow: `.github/workflows/functions-deploy.yml` (manual dispatch)
+
+The Functions workflow now includes:
+
+- pre-deploy quality gate (`ruff`, `pytest`, eval, threshold gate)
+- smoke-test option for `/api/health`
+- deployment evidence artifact upload (metadata + smoke response)
 
 This keeps the existing Container Apps path as the default while providing a production-shaped Functions option for event-driven/serverless hosting requirements.

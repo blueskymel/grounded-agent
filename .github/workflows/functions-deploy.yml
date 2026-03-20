@@ -16,6 +16,11 @@ on:
         required: true
         default: true
         type: boolean
+      evidence_label:
+        description: "Short label for deployment evidence artifact"
+        required: false
+        default: "functions-cutover"
+        type: string
 
 permissions:
   id-token: write
@@ -113,4 +118,42 @@ jobs:
         run: |
           set -euxo pipefail
           base_url="https://${{ inputs.function_app_name }}.azurewebsites.net"
-          curl --fail --show-error --silent "${base_url}/api/health"
+          curl --fail --show-error --silent "${base_url}/api/health" | tee smoke-health.json
+
+      - name: Build deployment evidence
+        run: |
+          set -euxo pipefail
+          mkdir -p deployment-evidence
+          base_url="https://${{ inputs.function_app_name }}.azurewebsites.net"
+
+          {
+            echo "label=${{ inputs.evidence_label }}"
+            echo "resource_group=${{ inputs.resource_group }}"
+            echo "function_app_name=${{ inputs.function_app_name }}"
+            echo "base_url=${base_url}"
+            echo "github_run_id=${{ github.run_id }}"
+            echo "github_sha=${{ github.sha }}"
+            echo "utc_timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > deployment-evidence/metadata.txt
+
+          if [ -f smoke-health.json ]; then
+            cp smoke-health.json deployment-evidence/smoke-health.json
+          else
+            echo '{"status":"skipped","reason":"run_smoke_test=false"}' > deployment-evidence/smoke-health.json
+          fi
+
+          {
+            echo "## Functions Deployment Evidence"
+            echo "- Label: ${{ inputs.evidence_label }}"
+            echo "- Resource Group: ${{ inputs.resource_group }}"
+            echo "- Function App: ${{ inputs.function_app_name }}"
+            echo "- Endpoint: ${base_url}/api/health"
+            echo "- Commit: ${{ github.sha }}"
+            echo "- Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload deployment evidence artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.evidence_label }}-${{ github.run_id }}
+          path: deployment-evidence

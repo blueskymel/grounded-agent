@@ -59,6 +59,18 @@ def run_agent(message: str, retrieval_backend: str) -> PlanResult:
         answer, tool_calls = run_agent_langgraph(message, retrieval_backend)
         return PlanResult(answer=answer, tool_calls=tool_calls)
 
+    if settings.agent_framework.lower() == "foundry":
+        from app.core.agent_foundry import run_agent_foundry
+
+        try:
+            answer, tool_calls = run_agent_foundry(message, retrieval_backend)
+            return PlanResult(answer=answer, tool_calls=tool_calls)
+        except Exception as exc:
+            return PlanResult(
+                answer=f"(stub) Foundry agent path unavailable: {exc}",
+                tool_calls=[],
+            )
+
     intent = parse_intent(message)
 
     def _tool_result(tool_name: str, tool_input: dict) -> PlanResult:

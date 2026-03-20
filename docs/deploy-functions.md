@@ -96,6 +96,7 @@ Inputs:
 - `resource_group`
 - `function_app_name`
 - `run_smoke_test` (default `true`)
+- `evidence_label` (default `functions-cutover`)
 
 Required repository secrets for Azure OIDC login:
 
@@ -105,7 +106,9 @@ Required repository secrets for Azure OIDC login:
 
 The workflow:
 
-1. Packages `functionapp/` plus `api/` into a zip.
-2. Logs into Azure via `azure/login@v2` using OIDC.
-3. Runs `az functionapp deployment source config-zip`.
-4. Optionally verifies `GET /api/health`.
+1. Runs a quality gate (`ruff`, `pytest`, `eval.run_eval`, `eval.gate`) before deployment.
+2. Packages `functionapp/` plus `api/` into a zip.
+3. Logs into Azure via `azure/login@v2` using OIDC.
+4. Runs `az functionapp deployment source config-zip`.
+5. Optionally verifies `GET /api/health`.
+6. Uploads a deployment evidence artifact containing metadata and smoke-test output.
