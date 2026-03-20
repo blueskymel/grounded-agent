@@ -1,5 +1,4 @@
 import json
-import os
 import sys
 import time
 from dataclasses import dataclass, asdict
