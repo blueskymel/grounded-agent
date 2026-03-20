@@ -111,4 +111,6 @@ The workflow:
 3. Logs into Azure via `azure/login@v2` using OIDC.
 4. Runs `az functionapp deployment source config-zip`.
 5. Optionally verifies `GET /api/health`.
-6. Uploads a deployment evidence artifact containing metadata and smoke-test output.
+6. Runs retry-based post-deploy health verification (`/api/health`) to reduce transient startup false negatives.
+7. Collects deployment diagnostics on failure (`az functionapp` deployment logs and app settings metadata).
+8. Uploads a deployment evidence artifact containing metadata and health-check output.

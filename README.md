@@ -454,6 +454,12 @@ Optional arguments:
 python -m eval.submit_azureml_eval_job --compute cpu-cluster --experiment grounded-agent-eval --limit 25
 ```
 
+After an eval run produces `eval/report.json`, generate a concise JSON + markdown gate summary:
+
+```powershell
+python -m eval.summarize_aml_eval_report --report eval/report.json
+```
+
 ### Foundry-Backed Evaluation Workflow
 
 This repo now includes an optional Azure AI Foundry evaluation path that reuses the existing local QA dataset instead of inventing a separate benchmark.
@@ -613,6 +619,8 @@ The Functions workflow now includes:
 
 - pre-deploy quality gate (`ruff`, `pytest`, eval, threshold gate)
 - smoke-test option for `/api/health`
+- retry-based post-deploy health verification (6 attempts, 10 seconds apart)
+- failure diagnostics collection (`az functionapp` deployment + settings metadata)
 - deployment evidence artifact upload (metadata + smoke response)
 
 This keeps the existing Container Apps path as the default while providing a production-shaped Functions option for event-driven/serverless hosting requirements.
