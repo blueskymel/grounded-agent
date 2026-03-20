@@ -2,6 +2,7 @@ import os
 from typing import List, Iterator
 from app.retrieval.base import RetrievedChunk
 from app.llm.client import get_aoai_client, get_chat_deployment
+from app.llm.langchain_answer_chain import generate_grounded_answer_lcel
 from dataclasses import dataclass
 import re
 
@@ -124,6 +125,23 @@ def _normalize_bullets(bullets: list[str]) -> str:
     # Keep bullets only, join as final answer
     return "\n".join(bullets)
 
+
+def _generate_aoai_chat_response(user_prompt: str) -> str:
+    client = get_aoai_client()
+    deployment = get_chat_deployment()
+
+    resp = client.chat.completions.create(
+        model=deployment,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.2,
+        max_tokens=400,
+    )
+
+    return (resp.choices[0].message.content or "").strip()
+
 def generate_grounded_answer(question: str, chunks: List[RetrievedChunk]) -> GroundedResult:
     provider = os.environ.get("LLM_PROVIDER", "aoai").lower().strip()
 
@@ -174,9 +192,7 @@ def generate_grounded_answer(question: str, chunks: List[RetrievedChunk]) -> Gro
             is_refusal=False,
         )
 
-    # ---- AOAI path (unchanged) ----
-    client = get_aoai_client()
-    deployment = get_chat_deployment()
+    # ---- AOAI path ----
 
     if not is_answerable(question, chunks):
         return GroundedResult(
@@ -193,17 +209,16 @@ SOURCES:
 {sources_text}
 """
 
-    resp = client.chat.completions.create(
-        model=deployment,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.2,
-        max_tokens=400,
-    )
+    answer_framework = os.environ.get("ANSWER_FRAMEWORK", "classic").lower().strip()
+    if answer_framework == "langchain":
+        try:
+            raw = generate_grounded_answer_lcel(question=question, sources_text=sources_text)
+        except Exception:
+            # Safe fallback to the legacy completion path if LCEL orchestration fails.
+            raw = _generate_aoai_chat_response(user_prompt)
+    else:
+        raw = _generate_aoai_chat_response(user_prompt)
 
-    raw = (resp.choices[0].message.content or "").strip()
     bullets = _extract_bullets(raw)
 
     if not _all_bullets_have_citations(bullets):

@@ -499,6 +499,23 @@ python -m uvicorn app.main:app --reload
 
 When enabled, the LangGraph state graph preserves the same tool-first behavior and retrieval fallback shape used by the existing deterministic flow.
 
+### LangChain LCEL Answer Chain (Optional)
+
+The default grounded answer path remains `ANSWER_FRAMEWORK=classic`, and this repo now includes an optional LangChain LCEL answer chain for framework fluency beyond ingestion chunking.
+
+- Toggle with env var: `ANSWER_FRAMEWORK=langchain`
+- LCEL chain implementation: `api/app/llm/langchain_answer_chain.py`
+- Grounded-answer dispatch point: `api/app/llm/grounded_answer.py`
+
+Example:
+
+```powershell
+$env:ANSWER_FRAMEWORK = "langchain"
+python -m uvicorn app.main:app --reload
+```
+
+When enabled, the LangChain chain composes prompt construction and AOAI invocation with LCEL and keeps the existing citation/refusal validation path.
+
 ---
 
 ## Deploy to Azure Container Apps
