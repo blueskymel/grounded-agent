@@ -423,6 +423,16 @@ In addition to the main CI workflow, this repo includes a dedicated ML quality p
 
 This gives you a repeatable quality gate for retrieval and grounded-answer behavior before merge or release.
 
+### ML Quality Pipeline (Azure DevOps)
+
+This repo also includes an Azure DevOps equivalent for teams using Azure-native delivery:
+
+- Pipeline file: `azure-pipelines.yml`
+- Triggers: PR/push for `api/**` and pipeline file changes, plus weekly cron
+- Stages: install deps, build FAISS index (mock), run eval suite, apply threshold gate, publish `api/eval/report.json` artifact
+
+This mirrors the GitHub Actions gate so quality checks are consistent across CI platforms.
+
 ### Foundry-Backed Evaluation Workflow
 
 This repo now includes an optional Azure AI Foundry evaluation path that reuses the existing local QA dataset instead of inventing a separate benchmark.

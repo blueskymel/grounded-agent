@@ -1,0 +1,82 @@
+# Azure DevOps equivalent of .github/workflows/ml-quality-pipeline.yml
+# Runs deterministic ML quality checks with mock providers.
+
+trigger:
+  branches:
+    include:
+      - develop
+      - main
+  paths:
+    include:
+      - api/**
+      - azure-pipelines.yml
+
+pr:
+  branches:
+    include:
+      - develop
+      - main
+  paths:
+    include:
+      - api/**
+      - azure-pipelines.yml
+
+schedules:
+  - cron: "0 20 * * 0"
+    displayName: Weekly ML quality gate
+    branches:
+      include:
+        - develop
+    always: true
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  RETRIEVAL_BACKEND: faiss
+  EMBEDDINGS_PROVIDER: mock
+  LLM_PROVIDER: mock
+
+stages:
+  - stage: MLQuality
+    displayName: ML Quality Gate
+    jobs:
+      - job: quality_gate
+        displayName: Build index, run eval, enforce thresholds
+        steps:
+          - checkout: self
+
+          - task: UsePythonVersion@0
+            displayName: Setup Python 3.11
+            inputs:
+              versionSpec: '3.11'
+
+          - script: |
+              python -m pip install --upgrade pip
+              pip install -r requirements.txt
+            displayName: Install dependencies
+            workingDirectory: api
+
+          - script: |
+              mkdir -p data/index
+              python -m ingest.build_faiss_index --input_dir fixtures/raw --out_dir data/index --provider mock --chunk_size 300 --chunk_overlap 50
+            displayName: Build FAISS index from fixtures (mock embeddings)
+            workingDirectory: api
+
+          - script: |
+              python -m eval.run_eval
+            displayName: Run eval suite and produce report
+            workingDirectory: api
+
+          - script: |
+              python -m eval.gate --min_recall 0.80 --min_format 0.95 --min_refusal 0.95
+            displayName: Apply quality thresholds
+            workingDirectory: api
+
+          - task: PublishPipelineArtifact@1
+            displayName: Upload eval report artifact
+            condition: always()
+            inputs:
+              targetPath: api/eval/report.json
+              artifact: eval-report
+              publishLocation: pipeline
