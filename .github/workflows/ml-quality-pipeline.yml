@@ -1,0 +1,61 @@
+name: ML Quality Pipeline
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 20 * * 0"
+  push:
+    paths:
+      - "api/**"
+      - ".github/workflows/ml-quality-pipeline.yml"
+  pull_request:
+    paths:
+      - "api/**"
+      - ".github/workflows/ml-quality-pipeline.yml"
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    env:
+      RETRIEVAL_BACKEND: faiss
+      EMBEDDINGS_PROVIDER: mock
+      LLM_PROVIDER: mock
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        working-directory: api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build FAISS index from fixtures (mock embeddings)
+        working-directory: api
+        run: |
+          mkdir -p data/index
+          python -m ingest.build_faiss_index --input_dir fixtures/raw --out_dir data/index --provider mock --chunk_size 300 --chunk_overlap 50
+
+      - name: Run eval suite and produce report
+        working-directory: api
+        run: |
+          python -m eval.run_eval
+
+      - name: Apply quality thresholds
+        working-directory: api
+        run: |
+          python -m eval.gate --min_recall 0.80 --min_format 0.95 --min_refusal 0.95
+
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: api/eval/report.json
+          if-no-files-found: warn

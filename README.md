@@ -397,3 +397,13 @@ This ensures the system maintains:
 - retrieval accuracy
 - citation correctness
 - safe refusal behavior
+
+### ML Quality Pipeline (GitHub Actions)
+
+In addition to the main CI workflow, this repo includes a dedicated ML quality pipeline:
+
+- Workflow: `.github/workflows/ml-quality-pipeline.yml`
+- Triggers: pull request, push to API/workflow paths, manual dispatch, and weekly schedule
+- Stages: build FAISS index (mock embeddings), run eval suite, apply threshold gate, upload `eval/report.json` artifact
+
+This gives you a repeatable quality gate for retrieval and grounded-answer behavior before merge or release.
