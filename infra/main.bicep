@@ -44,6 +44,15 @@ param azureSearchIndexName string = 'groundedagent-chunks'
 @description('Application Insights connection string (optional).')
 param appInsightsConnectionString string = ''
 
+@description('Set to true to provision API Management (Consumption) in front of the Container App.')
+param deployApim bool = false
+
+@description('Publisher email required by APIM. Used only when deployApim is true.')
+param publisherEmail string = 'admin@example.com'
+
+@description('Publisher organisation name for APIM.')
+param publisherName string = 'GroundedAgent'
+
 var tags = {
   'azd-env-name': environmentName
   project: 'grounded-agent'
@@ -75,9 +84,22 @@ module app './azure/container-app.bicep' = {
   }
 }
 
+// ------ APIM Module (optional) ----------------------------------------------
+module apimModule './azure/apim.bicep' = if (deployApim) {
+  name: 'grounded-agent-apim'
+  scope: rg
+  params: {
+    location: location
+    publisherEmail: publisherEmail
+    publisherName: publisherName
+    containerAppFqdn: app.outputs.containerAppFqdn
+  }
+}
+
 // ------ Outputs (azd reads these to wire up the service) --------------------
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = app.outputs.registryLoginServer
 output AZURE_CONTAINER_REGISTRY_NAME     string = app.outputs.registryName
-output SERVICE_API_URI                   string = 'https://${app.outputs.containerAppFqdn}'
+output SERVICE_API_URI                   string = deployApim ? apimModule.outputs.apimGatewayUrl : 'https://${app.outputs.containerAppFqdn}'
 output SERVICE_API_CONTAINER_APP_NAME    string = app.outputs.containerAppName
+output APIM_GATEWAY_URL                  string = deployApim ? apimModule.outputs.apimGatewayUrl : ''
 output RESOURCE_GROUP_NAME               string = rg.name

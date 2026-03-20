@@ -196,3 +196,84 @@ curl -X POST https://<fqdn>/chat `
 - Set `minReplicas: 0` in `container-app.bicep` to scale to zero for demo/dev environments (accept cold-start latency).
 - ACR Basic SKU costs ~$0.17/day. Upgrade to Standard for geo-replication or content trust.
 - Container Apps are billed per vCPU-second and GiB-second when active, plus per request at scale-to-zero.
+
+---
+
+## Option: Add API Management (APIM)
+
+Adding APIM in front of the Container App gives you subscription-key auth, rate limiting, CORS policy, and a single managed gateway URL. The `infra/azure/apim.bicep` module uses the **Consumption** (serverless) SKU — no monthly base cost, billed per call.
+
+### Architecture with APIM
+
+```
+Client
+  └─ APIM Gateway (Consumption) — subscription key + rate limit + CORS
+       └─ Container App (internal target, ACA still externally reachable)
+```
+
+### Enable APIM with azd
+
+```powershell
+azd env set DEPLOY_APIM true
+azd env set APIM_PUBLISHER_EMAIL you@example.com
+azd env set APIM_PUBLISHER_NAME  "YourOrg"
+azd up   # or: azd provision  (if image already pushed)
+```
+
+`azd up` will provision the APIM Consumption instance alongside ACA. Expect 5–10 minutes for APIM to become active. The `SERVICE_API_URI` output will be updated to the APIM gateway URL.
+
+### Enable APIM with manual CLI
+
+Pass the extra parameters to the existing `az deployment sub create` command:
+
+```powershell
+az deployment sub create `
+  --name "grounded-agent-infra" `
+  --location $LOCATION `
+  --template-file infra/main.bicep `
+  --parameters `
+      environmentName=$ENV_NAME `
+      location=$LOCATION `
+      deployApim=true `
+      publisherEmail=you@example.com `
+      publisherName=YourOrg `
+      ... (other params as before)
+```
+
+### Calling the API through APIM
+
+All requests must include a subscription key:
+
+```powershell
+# Get your subscription key from the Azure portal under
+# APIM > Subscriptions > grounded-agent product > Show keys
+$key = "<your-subscription-key>"
+$gw  = azd env get-value APIM_GATEWAY_URL
+
+# Health check
+curl -H "Ocp-Apim-Subscription-Key: $key" "$gw/health"
+
+# Chat
+curl -X POST "$gw/chat" `
+  -H "Ocp-Apim-Subscription-Key: $key" `
+  -H "Content-Type: application/json" `
+  -d '{"message": "What is the P1 runbook process?"}'
+```
+
+### APIM environment variables
+
+| Variable | Default | Notes |
+|---|---|---|
+| `DEPLOY_APIM` | `false` | Set to `true` to provision APIM |
+| `APIM_PUBLISHER_EMAIL` | `admin@example.com` | Required by APIM; use a real address |
+| `APIM_PUBLISHER_NAME` | `GroundedAgent` | Display name in the portal |
+
+### Rate limit policy
+
+The default policy in `infra/azure/apim.bicep` allows **60 calls per 60 seconds** per subscription. Edit the `apiPolicy` resource in that file to adjust before deploying.
+
+### Cost notes
+
+- APIM Consumption: ~$3.50 per million calls. First 1 million calls/month free on most subscriptions.
+- No hourly/daily base cost (unlike Developer or Standard tiers).
+- Disable `deployApim` in non-production environments to avoid any APIM costs during dev iteration.

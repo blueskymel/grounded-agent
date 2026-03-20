@@ -31,6 +31,15 @@
     },
     "appInsightsConnectionString": {
       "value": "${APPLICATIONINSIGHTS_CONNECTION_STRING}"
+    },
+    "deployApim": {
+      "value": "${DEPLOY_APIM}"
+    },
+    "publisherEmail": {
+      "value": "${APIM_PUBLISHER_EMAIL}"
+    },
+    "publisherName": {
+      "value": "${APIM_PUBLISHER_NAME}"
     }
   }
 }

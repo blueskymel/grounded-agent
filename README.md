@@ -433,6 +433,7 @@ The API ships with a complete Bicep + `azd` deployment path. Infrastructure crea
 - **Container Apps Environment** backed by **Log Analytics**
 - **Container App** (0.5 vCPU / 1 GiB, 1–3 replicas, HTTP scaling rule)
 - **User-Assigned Managed Identity** with `AcrPull` role on the registry
+- **API Management** (Consumption, optional `deployApim=true`) — subscription-key auth, rate limiting, CORS policy
 
 ### Quick deploy (azd)
 
@@ -441,6 +442,8 @@ azd auth login
 azd env new grounded-dev
 azd env set AZURE_LOCATION australiaeast
 # Set AZURE_OPENAI_*, AZURE_SEARCH_* env vars first — see docs/deploy-aca.md
+# Optional: add APIM in front
+# azd env set DEPLOY_APIM true ; azd env set APIM_PUBLISHER_EMAIL you@example.com
 azd up
 ```
 
