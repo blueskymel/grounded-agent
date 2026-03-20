@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from app.tools.registry import run_tool
 from app.agent.intent_parser import parse_intent
+from app.core.config import settings
 
 @dataclass
 class PlanResult:
@@ -52,6 +53,12 @@ def simple_plan(message: str) -> tuple[str, dict | None]:
 
 
 def run_agent(message: str, retrieval_backend: str) -> PlanResult:
+    if settings.agent_framework.lower() == "langgraph":
+        from app.core.agent_langgraph import run_agent_langgraph
+
+        answer, tool_calls = run_agent_langgraph(message, retrieval_backend)
+        return PlanResult(answer=answer, tool_calls=tool_calls)
+
     intent = parse_intent(message)
 
     def _tool_result(tool_name: str, tool_input: dict) -> PlanResult:

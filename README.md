@@ -482,6 +482,23 @@ $env:KEYVAULT_AZURE_SEARCH_API_KEY_SECRET_NAME = "azure-search-api-key"
 $env:KEYVAULT_APPLICATIONINSIGHTS_CONNECTION_STRING_SECRET_NAME = "applicationinsights-connection-string"
 ```
 
+### LangGraph Agent Variant (Optional)
+
+The default orchestration path remains deterministic (`AGENT_FRAMEWORK=classic`), and this repo now includes an optional LangGraph variant for framework fluency.
+
+- Toggle with env var: `AGENT_FRAMEWORK=langgraph`
+- Implementation: `api/app/core/agent_langgraph.py`
+- Dispatch point: `api/app/core/agent.py`
+
+Example:
+
+```powershell
+$env:AGENT_FRAMEWORK = "langgraph"
+python -m uvicorn app.main:app --reload
+```
+
+When enabled, the LangGraph state graph preserves the same tool-first behavior and retrieval fallback shape used by the existing deterministic flow.
+
 ---
 
 ## Deploy to Azure Container Apps

@@ -8,6 +8,7 @@ class Settings(BaseSettings):
 
     app_env: str = "local"
     log_level: str = "INFO"
+    agent_framework: str = "classic"
 
     # Feature flag: faiss | azure_search
     retrieval_backend: str = "faiss"
