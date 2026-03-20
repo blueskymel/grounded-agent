@@ -454,6 +454,24 @@ python -m eval.run_foundry_eval --refresh-dataset
 
 The script writes `eval/foundry_eval_results.json` locally and, when a Foundry project endpoint is configured, also logs the run to Foundry for history and comparison.
 
+### Managed Identity + Key Vault
+
+The app now supports passwordless secret retrieval from Azure Key Vault using `DefaultAzureCredential` and `SecretClient`.
+
+- Local development keeps working with `.env` values as before
+- Azure deployments can provide only `KEY_VAULT_URL`, `MANAGED_IDENTITY_CLIENT_ID`, and secret-name env vars
+- Supported Key Vault-backed settings: `AZURE_OPENAI_API_KEY`, `AZURE_SEARCH_API_KEY`, `APPLICATIONINSIGHTS_CONNECTION_STRING`
+
+App-side Key Vault configuration:
+
+```powershell
+$env:KEY_VAULT_URL = "https://<vault-name>.vault.azure.net/"
+$env:MANAGED_IDENTITY_CLIENT_ID = "<user-assigned-managed-identity-client-id>"
+$env:KEYVAULT_AZURE_OPENAI_API_KEY_SECRET_NAME = "azure-openai-api-key"
+$env:KEYVAULT_AZURE_SEARCH_API_KEY_SECRET_NAME = "azure-search-api-key"
+$env:KEYVAULT_APPLICATIONINSIGHTS_CONNECTION_STRING_SECRET_NAME = "applicationinsights-connection-string"
+```
+
 ---
 
 ## Deploy to Azure Container Apps
@@ -464,6 +482,7 @@ The API ships with a complete Bicep + `azd` deployment path. Infrastructure crea
 - **Container Apps Environment** backed by **Log Analytics**
 - **Container App** (0.5 vCPU / 1 GiB, 1–3 replicas, HTTP scaling rule)
 - **User-Assigned Managed Identity** with `AcrPull` role on the registry
+- **Key Vault** (optional `deployKeyVault=true`) with `Key Vault Secrets User` role assignment for the app identity
 - **API Management** (Consumption, optional `deployApim=true`) — subscription-key auth, rate limiting, CORS policy
 
 ### Quick deploy (azd)
@@ -473,6 +492,8 @@ azd auth login
 azd env new grounded-dev
 azd env set AZURE_LOCATION australiaeast
 # Set AZURE_OPENAI_*, AZURE_SEARCH_* env vars first — see docs/deploy-aca.md
+# Optional: use Key Vault + managed identity instead of injecting secrets directly
+# azd env set DEPLOY_KEY_VAULT true
 # Optional: add APIM in front
 # azd env set DEPLOY_APIM true ; azd env set APIM_PUBLISHER_EMAIL you@example.com
 azd up

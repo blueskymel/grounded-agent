@@ -41,11 +41,24 @@ param azureSearchIndexName string = 'groundedagent-chunks'
 @description('Application Insights connection string (optional telemetry export).')
 param appInsightsConnectionString string = ''
 
+@description('Set to true to provision Key Vault and configure the app to resolve secrets using managed identity.')
+param deployKeyVault bool = false
+
+@description('Secret name for Azure OpenAI API key in Key Vault.')
+param azureOpenAiApiKeySecretName string = 'azure-openai-api-key'
+
+@description('Secret name for Azure AI Search API key in Key Vault.')
+param azureSearchApiKeySecretName string = 'azure-search-api-key'
+
+@description('Secret name for Application Insights connection string in Key Vault.')
+param appInsightsConnectionStringSecretName string = 'applicationinsights-connection-string'
+
 // ------ Naming ---------------------------------------------------------------
 var suffix           = take(uniqueString(resourceGroup().id), 8)
 var logAnalyticsName = 'law-grounded-${suffix}'
 var containerEnvName = 'cae-grounded-${environmentName}'
 var registryName     = 'acrgrounded${suffix}'
+var keyVaultName     = 'kvgrounded${suffix}'
 var identityName     = 'id-grounded-${suffix}'
 var containerAppName = 'ca-grounded-agent'
 
@@ -77,6 +90,7 @@ resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' 
 
 // AcrPull built-in role ID
 var acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
+var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
 
 resource acrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(registry.id, identity.id, acrPullRoleId)
@@ -85,6 +99,37 @@ resource acrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
     roleDefinitionId: subscriptionResourceId(
       'Microsoft.Authorization/roleDefinitions',
       acrPullRoleId
+    )
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = if (deployKeyVault) {
+  name: keyVaultName
+  location: location
+  properties: {
+    tenantId: subscription().tenantId
+    enableRbacAuthorization: true
+    enabledForDeployment: false
+    enabledForTemplateDeployment: false
+    enabledForDiskEncryption: false
+    softDeleteRetentionInDays: 7
+    publicNetworkAccess: 'Enabled'
+    sku: {
+      family: 'A'
+      name: 'standard'
+    }
+  }
+}
+
+resource keyVaultSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployKeyVault) {
+  name: guid(keyVault.id, identity.id, keyVaultSecretsUserRoleId)
+  scope: keyVault
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      keyVaultSecretsUserRoleId
     )
     principalId: identity.properties.principalId
     principalType: 'ServicePrincipal'
@@ -133,11 +178,13 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           identity: identity.id
         }
       ]
-      secrets: [
-        { name: 'openai-api-key', value: azureOpenAiApiKey }
-        { name: 'search-api-key', value: azureSearchApiKey }
-        { name: 'appinsights-cs', value: appInsightsConnectionString }
-      ]
+      secrets: deployKeyVault
+        ? []
+        : [
+            { name: 'openai-api-key', value: azureOpenAiApiKey }
+            { name: 'search-api-key', value: azureSearchApiKey }
+            { name: 'appinsights-cs', value: appInsightsConnectionString }
+          ]
     }
     template: {
       containers: [
@@ -148,19 +195,31 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             cpu: json('0.5')
             memory: '1Gi'
           }
-          env: [
-            { name: 'APP_ENV',                               value: 'production' }
-            { name: 'RETRIEVAL_BACKEND',                     value: 'azure_search' }
-            { name: 'AZURE_OPENAI_ENDPOINT',                 value: azureOpenAiEndpoint }
-            { name: 'AZURE_OPENAI_API_KEY',                  secretRef: 'openai-api-key' }
-            { name: 'AZURE_OPENAI_API_VERSION',              value: '2024-10-21' }
-            { name: 'AZURE_OPENAI_CHAT_DEPLOYMENT',          value: azureOpenAiChatDeployment }
-            { name: 'AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT',    value: azureOpenAiEmbeddingsDeployment }
-            { name: 'AZURE_SEARCH_ENDPOINT',                 value: azureSearchEndpoint }
-            { name: 'AZURE_SEARCH_API_KEY',                  secretRef: 'search-api-key' }
-            { name: 'AZURE_SEARCH_INDEX_NAME',               value: azureSearchIndexName }
-            { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', secretRef: 'appinsights-cs' }
-          ]
+          env: concat(
+            [
+              { name: 'APP_ENV',                            value: 'production' }
+              { name: 'RETRIEVAL_BACKEND',                  value: 'azure_search' }
+              { name: 'AZURE_OPENAI_ENDPOINT',              value: azureOpenAiEndpoint }
+              { name: 'AZURE_OPENAI_API_VERSION',           value: '2024-10-21' }
+              { name: 'AZURE_OPENAI_CHAT_DEPLOYMENT',       value: azureOpenAiChatDeployment }
+              { name: 'AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT', value: azureOpenAiEmbeddingsDeployment }
+              { name: 'AZURE_SEARCH_ENDPOINT',              value: azureSearchEndpoint }
+              { name: 'AZURE_SEARCH_INDEX_NAME',            value: azureSearchIndexName }
+            ],
+            deployKeyVault
+              ? [
+                  { name: 'KEY_VAULT_URL',                                             value: any(keyVault).properties.vaultUri }
+                  { name: 'MANAGED_IDENTITY_CLIENT_ID',                                value: identity.properties.clientId }
+                  { name: 'KEYVAULT_AZURE_OPENAI_API_KEY_SECRET_NAME',                 value: azureOpenAiApiKeySecretName }
+                  { name: 'KEYVAULT_AZURE_SEARCH_API_KEY_SECRET_NAME',                 value: azureSearchApiKeySecretName }
+                  { name: 'KEYVAULT_APPLICATIONINSIGHTS_CONNECTION_STRING_SECRET_NAME', value: appInsightsConnectionStringSecretName }
+                ]
+              : [
+                  { name: 'AZURE_OPENAI_API_KEY',                  secretRef: 'openai-api-key' }
+                  { name: 'AZURE_SEARCH_API_KEY',                  secretRef: 'search-api-key' }
+                  { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', secretRef: 'appinsights-cs' }
+                ]
+          )
         }
       ]
       scale: {
@@ -177,7 +236,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       }
     }
   }
-  dependsOn: [acrPull]
+  dependsOn: deployKeyVault ? [acrPull, keyVaultSecretsUser] : [acrPull]
 }
 
 // ------ Outputs --------------------------------------------------------------
@@ -186,3 +245,5 @@ output registryName        string = registry.name
 output containerAppFqdn    string = containerApp.properties.configuration.ingress.fqdn
 output containerAppName    string = containerApp.name
 output identityClientId    string = identity.properties.clientId
+output keyVaultName        string = deployKeyVault ? keyVault.name : ''
+output keyVaultUrl         string = deployKeyVault ? any(keyVault).properties.vaultUri : ''

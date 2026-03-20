@@ -44,6 +44,18 @@ param azureSearchIndexName string = 'groundedagent-chunks'
 @description('Application Insights connection string (optional).')
 param appInsightsConnectionString string = ''
 
+@description('Set to true to provision Key Vault and configure app secret resolution via managed identity.')
+param deployKeyVault bool = false
+
+@description('Secret name for Azure OpenAI API key in Key Vault.')
+param azureOpenAiApiKeySecretName string = 'azure-openai-api-key'
+
+@description('Secret name for Azure AI Search API key in Key Vault.')
+param azureSearchApiKeySecretName string = 'azure-search-api-key'
+
+@description('Secret name for Application Insights connection string in Key Vault.')
+param appInsightsConnectionStringSecretName string = 'applicationinsights-connection-string'
+
 @description('Set to true to provision API Management (Consumption) in front of the Container App.')
 param deployApim bool = false
 
@@ -81,6 +93,10 @@ module app './azure/container-app.bicep' = {
     azureSearchApiKey: azureSearchApiKey
     azureSearchIndexName: azureSearchIndexName
     appInsightsConnectionString: appInsightsConnectionString
+    deployKeyVault: deployKeyVault
+    azureOpenAiApiKeySecretName: azureOpenAiApiKeySecretName
+    azureSearchApiKeySecretName: azureSearchApiKeySecretName
+    appInsightsConnectionStringSecretName: appInsightsConnectionStringSecretName
   }
 }
 
@@ -99,7 +115,9 @@ module apimModule './azure/apim.bicep' = if (deployApim) {
 // ------ Outputs (azd reads these to wire up the service) --------------------
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = app.outputs.registryLoginServer
 output AZURE_CONTAINER_REGISTRY_NAME     string = app.outputs.registryName
-output SERVICE_API_URI                   string = deployApim ? apimModule.outputs.apimGatewayUrl : 'https://${app.outputs.containerAppFqdn}'
+output SERVICE_API_URI                   string = deployApim ? any(apimModule).outputs.apimGatewayUrl : 'https://${app.outputs.containerAppFqdn}'
 output SERVICE_API_CONTAINER_APP_NAME    string = app.outputs.containerAppName
-output APIM_GATEWAY_URL                  string = deployApim ? apimModule.outputs.apimGatewayUrl : ''
+output APIM_GATEWAY_URL                  string = deployApim ? any(apimModule).outputs.apimGatewayUrl : ''
+output KEY_VAULT_NAME                    string = app.outputs.keyVaultName
+output KEY_VAULT_URL                     string = app.outputs.keyVaultUrl
 output RESOURCE_GROUP_NAME               string = rg.name

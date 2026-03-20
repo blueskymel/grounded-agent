@@ -64,6 +64,22 @@ azd up
 
 `azd up` will ask for your Azure subscription the first time. When complete it prints the Container App URL.
 
+### Option: enable Key Vault + managed identity
+
+If you want the app to resolve secrets from Key Vault at runtime instead of storing them in Container App secrets, use a two-step flow:
+
+```powershell
+azd env set DEPLOY_KEY_VAULT true
+azd provision
+
+$vault = azd env get-value KEY_VAULT_NAME
+.\infra\azure\set_keyvault_secrets.ps1 -VaultName $vault
+
+azd deploy
+```
+
+This provisions a Key Vault, assigns the Container App's user-assigned managed identity the `Key Vault Secrets User` role, and injects only the vault URL plus secret names into the app. The application then resolves the missing secret values via `DefaultAzureCredential` on startup.
+
 ### 3. Verify
 
 ```powershell
@@ -170,6 +186,10 @@ az containerapp show `
 | `AZURE_SEARCH_API_KEY` | Yes | Stored as Container App secret |
 | `AZURE_SEARCH_INDEX_NAME` | No | Defaults to `groundedagent-chunks` |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | No | Enables App Insights telemetry export |
+| `DEPLOY_KEY_VAULT` | No | Set to `true` to provision Key Vault and switch app secret loading to managed identity |
+| `KEYVAULT_AZURE_OPENAI_API_KEY_SECRET_NAME` | No | Defaults to `azure-openai-api-key` |
+| `KEYVAULT_AZURE_SEARCH_API_KEY_SECRET_NAME` | No | Defaults to `azure-search-api-key` |
+| `KEYVAULT_APPLICATIONINSIGHTS_CONNECTION_STRING_SECRET_NAME` | No | Defaults to `applicationinsights-connection-string` |
 
 ---
 
@@ -196,6 +216,18 @@ curl -X POST https://<fqdn>/chat `
 - Set `minReplicas: 0` in `container-app.bicep` to scale to zero for demo/dev environments (accept cold-start latency).
 - ACR Basic SKU costs ~$0.17/day. Upgrade to Standard for geo-replication or content trust.
 - Container Apps are billed per vCPU-second and GiB-second when active, plus per request at scale-to-zero.
+
+## Key Vault Secret Names
+
+Default secret names used by the app and Bicep templates:
+
+| Secret | Default name |
+|---|---|
+| Azure OpenAI API key | `azure-openai-api-key` |
+| Azure AI Search API key | `azure-search-api-key` |
+| App Insights connection string | `applicationinsights-connection-string` |
+
+The helper script `infra/azure/set_keyvault_secrets.ps1` populates these names from your current environment variables.
 
 ---
 

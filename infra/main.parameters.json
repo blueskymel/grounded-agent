@@ -32,6 +32,18 @@
     "appInsightsConnectionString": {
       "value": "${APPLICATIONINSIGHTS_CONNECTION_STRING}"
     },
+    "deployKeyVault": {
+      "value": "${DEPLOY_KEY_VAULT}"
+    },
+    "azureOpenAiApiKeySecretName": {
+      "value": "${KEYVAULT_AZURE_OPENAI_API_KEY_SECRET_NAME}"
+    },
+    "azureSearchApiKeySecretName": {
+      "value": "${KEYVAULT_AZURE_SEARCH_API_KEY_SECRET_NAME}"
+    },
+    "appInsightsConnectionStringSecretName": {
+      "value": "${KEYVAULT_APPLICATIONINSIGHTS_CONNECTION_STRING_SECRET_NAME}"
+    },
     "deployApim": {
       "value": "${DEPLOY_APIM}"
     },
