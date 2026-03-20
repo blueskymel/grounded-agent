@@ -422,3 +422,35 @@ In addition to the main CI workflow, this repo includes a dedicated ML quality p
 - Stages: build FAISS index (mock embeddings), run eval suite, apply threshold gate, upload `eval/report.json` artifact
 
 This gives you a repeatable quality gate for retrieval and grounded-answer behavior before merge or release.
+
+---
+
+## Deploy to Azure Container Apps
+
+The API ships with a complete Bicep + `azd` deployment path. Infrastructure created:
+
+- **Azure Container Registry** (Basic, managed-identity pull — no admin keys)
+- **Container Apps Environment** backed by **Log Analytics**
+- **Container App** (0.5 vCPU / 1 GiB, 1–3 replicas, HTTP scaling rule)
+- **User-Assigned Managed Identity** with `AcrPull` role on the registry
+
+### Quick deploy (azd)
+
+```powershell
+azd auth login
+azd env new grounded-dev
+azd env set AZURE_LOCATION australiaeast
+# Set AZURE_OPENAI_*, AZURE_SEARCH_* env vars first — see docs/deploy-aca.md
+azd up
+```
+
+### Manual deploy (Azure CLI)
+
+```powershell
+az deployment sub create \
+  --location australiaeast \
+  --template-file infra/main.bicep \
+  --parameters environmentName=grounded-dev location=australiaeast ...
+```
+
+Full step-by-step instructions, environment variable reference, and post-deploy checks: [docs/deploy-aca.md](docs/deploy-aca.md)

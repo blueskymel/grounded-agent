@@ -1,0 +1,20 @@
+# Azure Developer CLI (azd) manifest
+# https://learn.microsoft.com/azure/developer/azure-developer-cli/azd-schema
+
+name: grounded-agent
+metadata:
+  template: grounded-agent@0.0.1
+
+services:
+  api:
+    # Path to the Python API source (used by azd for language detection)
+    project: ./api
+    language: py
+    host: containerapp
+    docker:
+      path: ./docker/api.Dockerfile
+      context: .   # Dockerfile COPYs api/ relative to repo root
+
+infra:
+  provider: bicep
+  path: infra       # main.bicep lives at infra/main.bicep
