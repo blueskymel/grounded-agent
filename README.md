@@ -423,6 +423,37 @@ In addition to the main CI workflow, this repo includes a dedicated ML quality p
 
 This gives you a repeatable quality gate for retrieval and grounded-answer behavior before merge or release.
 
+### Foundry-Backed Evaluation Workflow
+
+This repo now includes an optional Azure AI Foundry evaluation path that reuses the existing local QA dataset instead of inventing a separate benchmark.
+
+- Script: `python -m eval.run_foundry_eval --refresh-dataset`
+- Dataset prep: `api/eval/foundry_dataset.py` generates `eval/foundry_eval_dataset.jsonl` from the current retriever + grounded-answer flow
+- Evaluators: `groundedness`, `relevance`, `coherence`, `fluency` via `azure-ai-evaluation`
+- Foundry tracking: set `AZURE_AI_PROJECT_ENDPOINT` to push the run into a Foundry project for portal-side history/comparison
+
+Required environment variables:
+
+```powershell
+$env:AZURE_OPENAI_ENDPOINT = "https://<your-aoai>.openai.azure.com/"
+$env:AZURE_OPENAI_API_KEY = "<key>"
+$env:AZURE_OPENAI_CHAT_DEPLOYMENT = "gpt-4o"
+
+# Optional: override eval model deployment
+$env:FOUNDRY_EVAL_MODEL_DEPLOYMENT = "gpt-4o-mini"
+
+# Optional: log the run into Azure AI Foundry
+$env:AZURE_AI_PROJECT_ENDPOINT = "https://<resource>.services.ai.azure.com/api/projects/<project>"
+```
+
+Run it from `api/`:
+
+```powershell
+python -m eval.run_foundry_eval --refresh-dataset
+```
+
+The script writes `eval/foundry_eval_results.json` locally and, when a Foundry project endpoint is configured, also logs the run to Foundry for history and comparison.
+
 ---
 
 ## Deploy to Azure Container Apps
