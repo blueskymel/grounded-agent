@@ -29,3 +29,6 @@ data/
 # Env
 .env
 .env.*
+
+# Local interview prep notes
+docs/job-maps/

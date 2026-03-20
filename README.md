@@ -196,9 +196,18 @@ Done: FAISS rebuilt (demo mode).
 This process:
 
 - Reads all documents in `data/raw/`
-- Extracts and chunks content
+- Extracts and chunks content with LangChain `RecursiveCharacterTextSplitter`
 - Generates embeddings
 - Builds a local FAISS vector index
+
+Optional chunking controls:
+
+```bash
+python -m ingest.build_faiss_index --input_dir data/raw --out_dir data/index --chunk_size 300 --chunk_overlap 50
+```
+
+- `chunk_size`: max characters per chunk
+- `chunk_overlap`: overlapping characters between adjacent chunks
 
 ---
 
@@ -287,6 +296,10 @@ set EMBEDDINGS_PROVIDER=mock python -m ingest.build_faiss_index --input_dir fixt
 macOS / Linux:
 
 export EMBEDDINGS_PROVIDER=mock python -m ingest.build_faiss_index --input_dir fixtures/raw --out_dir data/index
+
+Optional tuning:
+
+- Add `--chunk_size` and `--chunk_overlap` to tune retrieval granularity.
 
 Step 3 — Start the **API**
 

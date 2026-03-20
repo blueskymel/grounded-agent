@@ -10,13 +10,20 @@ from pathlib import Path
 import numpy as np
 import faiss
 from dotenv import load_dotenv
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 load_dotenv()
 
 DEFAULT_DIM = int(os.environ.get("MOCK_EMBED_DIM", "384"))
 
-def chunk_text(text: str, chunk_size: int = 300) -> list[str]:
-    return [text[i : i + chunk_size] for i in range(0, len(text), chunk_size)]
+
+def chunk_text(text: str, chunk_size: int = 300, chunk_overlap: int = 50) -> list[str]:
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        separators=["\n\n", "\n", ". ", " ", ""],
+    )
+    return splitter.split_text(text)
 
 def mock_embed(text: str, dim: int = DEFAULT_DIM) -> list[float]:
     # Deterministic per-text embedding: seed from sha256(text)
@@ -41,8 +48,14 @@ def main() -> None:
     parser.add_argument("--input_dir", default="data/raw")
     parser.add_argument("--out_dir", default="data/index")
     parser.add_argument("--chunk_size", type=int, default=300)
+    parser.add_argument("--chunk_overlap", type=int, default=int(os.environ.get("CHUNK_OVERLAP", "50")))
     parser.add_argument("--provider", default=os.environ.get("EMBEDDINGS_PROVIDER", "aoai"))
     args = parser.parse_args()
+
+    if args.chunk_overlap < 0:
+        raise ValueError("chunk_overlap must be >= 0")
+    if args.chunk_overlap >= args.chunk_size:
+        raise ValueError("chunk_overlap must be smaller than chunk_size")
 
     data_dir = Path(args.input_dir)
     index_dir = Path(args.out_dir)
@@ -55,7 +68,12 @@ def main() -> None:
     chunks: list[dict] = []
     for file in files:
         text = file.read_text(encoding="utf-8")
-        for idx, piece in enumerate(chunk_text(text, chunk_size=args.chunk_size)):
+        pieces = chunk_text(
+            text,
+            chunk_size=args.chunk_size,
+            chunk_overlap=args.chunk_overlap,
+        )
+        for idx, piece in enumerate(pieces):
             chunks.append({"doc_id": file.stem, "chunk_id": f"{file.stem}-{idx}", "text": piece})
 
     print(f"Total chunks: {len(chunks)}")
