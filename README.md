@@ -1,5 +1,7 @@
 # GroundedAgent — Agentic RAG Copilot (Azure-first)
 
+[![CI: passing](https://github.com/blueskymel/grounded-agent/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/blueskymel/grounded-agent/actions/workflows/ci.yml)
+
 **GroundedAgent** is a private, production-style **Agentic RAG Copilot platform** for IT Ops and Retail Enterprise teams. It answers questions grounded in internal runbooks, postmortems, policies, and incident notes **with citations**, and can **take actions via tools** (e.g., draft a change plan, create a ticket — mocked initially).
 
 This repo is designed to demonstrate **real AI Engineer skills**: retrieval, orchestration, safety, observability, deployment, and cost control.
@@ -71,6 +73,7 @@ GroundedAgent follows an enterprise-safe AI architecture pattern:
 3. **Refusal gating** when evidence is insufficient
 4. **Feature-flag infrastructure** (FAISS ↔ Azure AI Search)
 5. **Evaluation harness + CI gate** to prevent quality regression
+6. **Privacy-first data handling**: Designed to support PII/PHI scrubbing patterns and role-based access control (RBAC) at the retrieval layer
 
 This structure mirrors real-world enterprise AI systems where:
 - LLMs augment workflows
