@@ -15,6 +15,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 load_dotenv()
 
 DEFAULT_DIM = int(os.environ.get("MOCK_EMBED_DIM", "384"))
+DEFAULT_FAISS_NLIST = int(os.environ.get("FAISS_IVF_NLIST", "64"))
 
 
 def chunk_text(text: str, chunk_size: int = 300, chunk_overlap: int = 50) -> list[str]:
@@ -50,6 +51,12 @@ def main() -> None:
     parser.add_argument("--chunk_size", type=int, default=300)
     parser.add_argument("--chunk_overlap", type=int, default=int(os.environ.get("CHUNK_OVERLAP", "50")))
     parser.add_argument("--provider", default=os.environ.get("EMBEDDINGS_PROVIDER", "aoai"))
+    parser.add_argument(
+        "--ivf-nlist",
+        type=int,
+        default=DEFAULT_FAISS_NLIST,
+        help="Number of IVF clusters (nlist) for IndexIVFFlat.",
+    )
     args = parser.parse_args()
 
     if args.chunk_overlap < 0:
@@ -89,8 +96,20 @@ def main() -> None:
             embeddings.append(resp.data[0].embedding)
 
     emb = np.array(embeddings, dtype="float32")
-    index = faiss.IndexFlatL2(emb.shape[1])
-    index.add(emb)
+    dim = emb.shape[1]
+
+    if len(chunks) < 2:
+        # IVF requires training; for tiny corpora fall back to exact flat index.
+        index = faiss.IndexFlatL2(dim)
+        index.add(emb)
+        print("Using IndexFlatL2 (fallback for very small dataset).")
+    else:
+        quantizer = faiss.IndexFlatL2(dim)
+        nlist = max(1, min(args.ivf_nlist, len(chunks)))
+        index = faiss.IndexIVFFlat(quantizer, dim, nlist, faiss.METRIC_L2)
+        index.train(emb)
+        index.add(emb)
+        print(f"Using IndexIVFFlat (nlist={nlist}).")
 
     faiss.write_index(index, str(index_dir / "faiss.index"))
     with open(index_dir / "chunks.jsonl", "w", encoding="utf-8") as f:

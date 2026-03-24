@@ -216,7 +216,7 @@ This process:
 - Reads all documents in `data/raw/`
 - Extracts and chunks content with LangChain `RecursiveCharacterTextSplitter`
 - Generates embeddings
-- Builds a local FAISS vector index
+- Builds a local FAISS IVF Flat vector index (with flat-index fallback for very small corpora)
 
 Optional chunking controls:
 
@@ -226,6 +226,7 @@ python -m ingest.build_faiss_index --input_dir data/raw --out_dir data/index --c
 
 - `chunk_size`: max characters per chunk
 - `chunk_overlap`: overlapping characters between adjacent chunks
+- `--ivf-nlist`: IVF cluster count (default `64`, automatically capped by chunk count)
 
 ---
 
