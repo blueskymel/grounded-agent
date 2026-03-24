@@ -171,6 +171,81 @@ Open:
 
 ---
 
+### 2️⃣ Start the MCP Server (Basic Wrapper)
+
+From the `api/` directory:
+
+```bash
+python -m app.mcp_server
+```
+
+Or via Makefile:
+
+```bash
+make run-mcp
+```
+
+This exposes MCP tools over stdio:
+
+- `chat(message)`
+- `health()`
+- `kb()`
+
+The `chat` tool uses the same GroundedAgent flow:
+
+- tool-first routing (intent parser + tool registry)
+- grounded retrieval fallback with citations
+
+All MCP tool responses use a consistent envelope:
+
+```json
+{
+  "ok": true,
+  "request_id": "uuid",
+  "timings": { "total_ms": 12 },
+  "data": { "...": "tool-specific payload" },
+  "error": null
+}
+```
+
+---
+
+### 3️⃣ Connect an MCP Client
+
+You can register GroundedAgent as an MCP server in your local client config.
+
+VS Code MCP config example (`.vscode/mcp.json`):
+
+```json
+{
+  "servers": {
+    "grounded-agent": {
+      "command": "python",
+      "args": ["-m", "app.mcp_server"],
+      "cwd": "api"
+    }
+  }
+}
+```
+
+Claude Desktop config example (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "grounded-agent": {
+      "command": "python",
+      "args": ["-m", "app.mcp_server"],
+      "cwd": "C:\\Users\\roger\\Downloads\\Roger\\grounded-agent\\api"
+    }
+  }
+}
+```
+
+If your system Python is not the one with project dependencies, replace `python` with your venv executable path.
+
+---
+
 ## Knowledge Base Introspection
 
 GroundedAgent exposes a small introspection endpoint:

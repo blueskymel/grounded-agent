@@ -1,4 +1,4 @@
-.PHONY: install test lint build-index eval run
+.PHONY: install test lint build-index eval run run-mcp
 
 install:
 	python -m pip install -U pip
@@ -20,3 +20,6 @@ eval:
 
 run:
 	uvicorn app.main:app --reload --port 8000
+
+run-mcp:
+	python -m app.mcp_server
