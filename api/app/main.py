@@ -8,6 +8,11 @@ from app.retrieval.factory import get_retriever
 from app.core.agent import run_agent
 from app.schemas.docs import DocSummary
 from app.retrieval.stats import faiss_doc_stats, azure_search_doc_stats
+from app.security.prompt_injection import (
+    PROMPT_INJECTION_REFUSAL,
+    check_user_message_for_prompt_injection,
+    filter_retrieved_chunks_for_prompt_injection,
+)
 
 import logging
 from logging.handlers import RotatingFileHandler
@@ -120,6 +125,35 @@ def chat(req: ChatRequest, request: Request):
     try:
 
         # ----------------------------------
+        # Prompt injection guard (direct)
+        # ----------------------------------
+
+        pi_check = check_user_message_for_prompt_injection(req.message)
+        if pi_check.blocked:
+            total_ms = int((time.perf_counter() - t_total0) * 1000)
+            log_event(
+                "chat_blocked_prompt_injection",
+                request_id=request_id,
+                retrieval_backend=backend,
+                total_ms=total_ms,
+                signals=pi_check.matched_signals,
+            )
+            return ChatResponse(
+                answer=PROMPT_INJECTION_REFUSAL,
+                citations=[],
+                tool_calls=[],
+                retrieval_backend=backend,
+                timings={
+                    "retrieval_ms": 0,
+                    "embed_ms": 0,
+                    "search_ms": 0,
+                    "llm_ms": 0,
+                    "total_ms": total_ms,
+                },
+                retrieved_chunks=[],
+            )
+
+        # ----------------------------------
         # Tool-first agent path
         # ----------------------------------
 
@@ -174,6 +208,17 @@ def chat(req: ChatRequest, request: Request):
         retriever = get_retriever()
 
         chunks = retriever.retrieve(req.message, top_k=5)
+        raw_chunk_count = len(chunks)
+        chunks, blocked_chunk_count = filter_retrieved_chunks_for_prompt_injection(chunks)
+
+        if blocked_chunk_count:
+            log_event(
+                "chat_filtered_prompt_injection_chunks",
+                request_id=request_id,
+                retrieval_backend=backend,
+                blocked_chunk_count=blocked_chunk_count,
+                safe_chunk_count=len(chunks),
+            )
 
         embed_ms = getattr(retriever, "last_embed_ms", 0) or 0
         search_ms = getattr(retriever, "last_search_ms", 0) or 0
@@ -217,6 +262,13 @@ def chat(req: ChatRequest, request: Request):
             if refused:
                 citations = []
                 top_chunks = []
+        elif raw_chunk_count > 0 and not chunks:
+
+            answer = PROMPT_INJECTION_REFUSAL
+            refused = True
+            citations = []
+            top_chunks = []
+
         else:
 
             answer = "I don't have any indexed runbooks yet. Upload/ingest documents first."
@@ -277,8 +329,21 @@ def chat(req: ChatRequest, request: Request):
 @app.post("/chat/stream")
 async def chat_stream(req: ChatRequest):
     async def event_stream():
+        pi_check = check_user_message_for_prompt_injection(req.message)
+        if pi_check.blocked:
+            yield f"data: {json.dumps({'type': 'token', 'value': PROMPT_INJECTION_REFUSAL})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return
+
         retriever = get_retriever()
         chunks = retriever.retrieve(req.message, top_k=5)
+        raw_chunk_count = len(chunks)
+        chunks, blocked_chunk_count = filter_retrieved_chunks_for_prompt_injection(chunks)
+
+        if raw_chunk_count > 0 and not chunks:
+            yield f"data: {json.dumps({'type': 'token', 'value': PROMPT_INJECTION_REFUSAL})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return
 
         if not chunks:
             yield f"data: {json.dumps({'type': 'error', 'message': 'No documents'})}\n\n"

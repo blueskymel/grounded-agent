@@ -16,6 +16,11 @@ from app.observability.logger import log_event
 from app.observability.tools import summarize_tool_calls
 from app.retrieval.factory import get_retriever
 from app.retrieval.stats import azure_search_doc_stats, faiss_doc_stats
+from app.security.prompt_injection import (
+    PROMPT_INJECTION_REFUSAL,
+    check_user_message_for_prompt_injection,
+    filter_retrieved_chunks_for_prompt_injection,
+)
 from app.schemas.chat import Citation, ToolCall
 from app.schemas.chat import ChatRequest
 
@@ -63,8 +68,17 @@ def _serialize_doc(item: Any) -> dict[str, Any]:
 def _build_rag_response(message: str) -> dict[str, Any]:
     retriever = get_retriever()
     chunks = retriever.retrieve(message, top_k=5)
+    raw_chunk_count = len(chunks)
+    chunks, _ = filter_retrieved_chunks_for_prompt_injection(chunks)
 
     if not chunks:
+        if raw_chunk_count > 0:
+            return {
+                "answer": PROMPT_INJECTION_REFUSAL,
+                "citations": [],
+                "tool_calls": [],
+                "retrieval_backend": settings.retrieval_backend,
+            }
         return {
             "answer": "I don't have any indexed runbooks yet. Upload/ingest documents first.",
             "citations": [],
@@ -137,6 +151,24 @@ def chat(message: str) -> dict:
     try:
         # Reuse API schema rules so MCP and HTTP enforce the same constraints.
         ChatRequest(message=message)
+
+        pi_check = check_user_message_for_prompt_injection(message)
+        if pi_check.blocked:
+            total_ms = int((time.perf_counter() - t0) * 1000)
+            data = {
+                "answer": PROMPT_INJECTION_REFUSAL,
+                "citations": [],
+                "tool_calls": [],
+                "retrieval_backend": settings.retrieval_backend,
+            }
+            log_event(
+                "mcp_chat_blocked_prompt_injection",
+                request_id=request_id,
+                retrieval_backend=settings.retrieval_backend,
+                total_ms=total_ms,
+                signals=pi_check.matched_signals,
+            )
+            return _build_response(ok=True, request_id=request_id, data=data, total_ms=total_ms)
 
         data = _chat_impl(message)
         total_ms = int((time.perf_counter() - t0) * 1000)
