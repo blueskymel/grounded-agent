@@ -47,6 +47,13 @@ class FaissRetriever(Retriever):
         self.dim = int(getattr(self.index, "d", 0))  # embedding dimension from index
         self.chunks = self._load_chunks(self.chunks_path)
 
+        # IVF recall tuning: probe more than one inverted list by default.
+        # For non-IVF indexes, nprobe does not exist and this is skipped.
+        self.ivf_nprobe = int(os.environ.get("FAISS_IVF_NPROBE", "8"))
+        if hasattr(self.index, "nprobe"):
+            max_probe = int(getattr(self.index, "nlist", self.ivf_nprobe))
+            self.index.nprobe = max(1, min(self.ivf_nprobe, max_probe))
+
         # Embeddings provider:
         # - "aoai" (default) uses Azure OpenAI query embeddings
         # - "mock" uses deterministic local embeddings (CI-friendly, no secrets)
