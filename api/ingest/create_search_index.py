@@ -36,6 +36,7 @@ def main():
 
     fields = [
         SimpleField(name="id", type=SearchFieldDataType.String, key=True),
+        SimpleField(name="tenant_id", type=SearchFieldDataType.String, filterable=True, sortable=True),
         SimpleField(name="doc_id", type=SearchFieldDataType.String, filterable=True, sortable=True),
         SimpleField(name="chunk_id", type=SearchFieldDataType.String, filterable=True, sortable=True),
         SearchableField(name="title", type=SearchFieldDataType.String, analyzer_name="en.lucene"),

@@ -8,6 +8,7 @@ from azure.search.documents import SearchClient
 load_dotenv()
 
 INDEX_NAME = os.environ.get("AZURE_SEARCH_INDEX_NAME", "groundedagent-chunks")
+DEFAULT_TENANT_ID = os.environ.get("DEFAULT_TENANT_ID", "default")
 
 
 def main():
@@ -55,6 +56,7 @@ def main():
                 "id": chunk["chunk_id"],  # key field
                 "doc_id": chunk["doc_id"],
                 "chunk_id": chunk["chunk_id"],
+                "tenant_id": chunk.get("tenant_id", DEFAULT_TENANT_ID),
                 "title": chunk.get("title"),
                 "source_uri": chunk.get("source_uri"),
                 "content": chunk["text"],

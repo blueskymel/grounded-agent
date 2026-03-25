@@ -36,12 +36,22 @@ class AzureSearchRetriever(Retriever):
         )
         return resp.data[0].embedding
 
-    def retrieve(self, query: str, top_k: int = 5) -> list[RetrievedChunk]:
+    def retrieve(
+        self,
+        query: str,
+        top_k: int = 5,
+        tenant_id: str | None = None,
+    ) -> list[RetrievedChunk]:
         q = query.strip()
         if not q:
             return []
 
         vector = self._embed_query(q)
+
+        search_filter = None
+        if tenant_id:
+            safe_tenant = tenant_id.replace("'", "''")
+            search_filter = f"tenant_id eq '{safe_tenant}'"
 
         # Hybrid search: keyword + vector. (Works well for RAG)
         results = self.search_client.search(
@@ -53,6 +63,7 @@ class AzureSearchRetriever(Retriever):
                 "fields": "contentVector",
                 "k": top_k,
             }],
+            filter=search_filter,
             select=["doc_id", "chunk_id", "title", "source_uri", "content"],
         )
 

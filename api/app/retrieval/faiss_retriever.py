@@ -108,7 +108,12 @@ class FaissRetriever(Retriever):
 
         return np.array(resp.data[0].embedding, dtype="float32")
 
-    def retrieve(self, query: str, top_k: int = 5) -> list[RetrievedChunk]:
+    def retrieve(
+        self,
+        query: str,
+        top_k: int = 5,
+        tenant_id: str | None = None,
+    ) -> list[RetrievedChunk]:
         q = query.strip()
         if not q:
             return []
@@ -120,7 +125,8 @@ class FaissRetriever(Retriever):
         self.last_embed_ms = int((time.perf_counter() - t0) * 1000)
 
         t1 = time.perf_counter()
-        distances, indices = self.index.search(qvec, top_k)
+        search_k = min(max(top_k * 20, top_k), len(self.chunks))
+        distances, indices = self.index.search(qvec, search_k)
         self.last_search_ms = int((time.perf_counter() - t1) * 1000)
 
         results: list[RetrievedChunk] = []
@@ -128,6 +134,11 @@ class FaissRetriever(Retriever):
             if idx < 0 or idx >= len(self.chunks):
                 continue
             meta = self.chunks[idx]
+
+            item_tenant = str(meta.get("tenant_id", "default"))
+            if tenant_id and item_tenant != tenant_id:
+                continue
+
             dist = float(distances[0][rank])
             score = 1.0 / (1.0 + dist)
 
@@ -141,5 +152,8 @@ class FaissRetriever(Retriever):
                     text=meta.get("text", ""),
                 )
             )
+
+            if len(results) >= top_k:
+                break
 
         return results

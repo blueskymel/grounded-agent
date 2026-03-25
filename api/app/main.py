@@ -24,6 +24,7 @@ from app.observability.logger import log_event
 from app.observability.errors import format_exception
 from app.observability.tools import summarize_tool_calls
 from app.observability.app_insights import init_app_insights
+from app.observability.tracing import trace_step
 from fastapi.responses import StreamingResponse
 import json
 import asyncio
@@ -85,6 +86,25 @@ async def add_request_id(request: Request, call_next):
     return response
 
 
+@app.middleware("http")
+async def add_tenant_context(request: Request, call_next):
+    tenant_id = (request.headers.get("x-tenant-id") or "").strip()
+
+    if not tenant_id:
+        if settings.enforce_tenant_header:
+            return Response(
+                content=json.dumps({"detail": "Missing x-tenant-id header"}),
+                status_code=400,
+                media_type="application/json",
+            )
+        tenant_id = settings.default_tenant_id
+
+    request.state.tenant_id = tenant_id
+    response = await call_next(request)
+    response.headers["x-tenant-id"] = tenant_id
+    return response
+
+
 @app.get("/health")
 def health():
     return {
@@ -109,6 +129,7 @@ def chat(req: ChatRequest, request: Request):
 
     request_id = getattr(request.state, "request_id", None)
     backend = settings.retrieval_backend
+    tenant_id = getattr(request.state, "tenant_id", settings.default_tenant_id)
 
     t_total0 = time.perf_counter()
 
@@ -157,7 +178,8 @@ def chat(req: ChatRequest, request: Request):
         # Tool-first agent path
         # ----------------------------------
 
-        agent_result = run_agent(req.message, backend)
+        with trace_step("agent.plan"):
+            agent_result = run_agent(req.message, backend)
 
         if getattr(agent_result, "tool_calls", None):
 
@@ -176,6 +198,7 @@ def chat(req: ChatRequest, request: Request):
                 "chat_request",
                 request_id=request_id,
                 retrieval_backend=backend,
+                tenant_id=tenant_id,
                 retrieval_ms=0,
                 llm_ms=0,
                 total_ms=total_ms,
@@ -207,7 +230,11 @@ def chat(req: ChatRequest, request: Request):
 
         retriever = get_retriever()
 
-        chunks = retriever.retrieve(req.message, top_k=5)
+        with trace_step("retrieval.search"):
+            try:
+                chunks = retriever.retrieve(req.message, top_k=5, tenant_id=tenant_id)
+            except TypeError:
+                chunks = retriever.retrieve(req.message, top_k=5)
         raw_chunk_count = len(chunks)
         chunks, blocked_chunk_count = filter_retrieved_chunks_for_prompt_injection(chunks)
 
@@ -216,6 +243,7 @@ def chat(req: ChatRequest, request: Request):
                 "chat_filtered_prompt_injection_chunks",
                 request_id=request_id,
                 retrieval_backend=backend,
+                tenant_id=tenant_id,
                 blocked_chunk_count=blocked_chunk_count,
                 safe_chunk_count=len(chunks),
             )
@@ -244,7 +272,8 @@ def chat(req: ChatRequest, request: Request):
 
             t_llm0 = time.perf_counter()
 
-            result = generate_grounded_answer(req.message, chunks)
+            with trace_step("llm.answer"):
+                result = generate_grounded_answer(req.message, chunks)
 
             llm_ms = int((time.perf_counter() - t_llm0) * 1000)
 
@@ -285,6 +314,7 @@ def chat(req: ChatRequest, request: Request):
             "chat_request",
             request_id=request_id,
             retrieval_backend=backend,
+            tenant_id=tenant_id,
             retrieval_ms=retrieval_ms,
             embed_ms=embed_ms,
             search_ms=search_ms,
@@ -320,6 +350,7 @@ def chat(req: ChatRequest, request: Request):
             "chat_error",
             request_id=request_id,
             retrieval_backend=backend,
+            tenant_id=tenant_id,
             total_ms=total_ms,
             error=format_exception(e),
         )
@@ -327,7 +358,7 @@ def chat(req: ChatRequest, request: Request):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/chat/stream")
-async def chat_stream(req: ChatRequest):
+async def chat_stream(req: ChatRequest, request: Request):
     async def event_stream():
         pi_check = check_user_message_for_prompt_injection(req.message)
         if pi_check.blocked:
@@ -336,9 +367,14 @@ async def chat_stream(req: ChatRequest):
             return
 
         retriever = get_retriever()
-        chunks = retriever.retrieve(req.message, top_k=5)
+        tenant_id = getattr(request.state, "tenant_id", settings.default_tenant_id)
+        with trace_step("stream.retrieval.search"):
+            try:
+                chunks = retriever.retrieve(req.message, top_k=5, tenant_id=tenant_id)
+            except TypeError:
+                chunks = retriever.retrieve(req.message, top_k=5)
         raw_chunk_count = len(chunks)
-        chunks, blocked_chunk_count = filter_retrieved_chunks_for_prompt_injection(chunks)
+        chunks, _ = filter_retrieved_chunks_for_prompt_injection(chunks)
 
         if raw_chunk_count > 0 and not chunks:
             yield f"data: {json.dumps({'type': 'token', 'value': PROMPT_INJECTION_REFUSAL})}\n\n"

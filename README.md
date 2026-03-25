@@ -83,6 +83,8 @@ This structure mirrors real-world enterprise AI systems where:
 - CI builds the FAISS index from api/fixtures/raw using deterministic mock embeddings (--provider mock) to avoid requiring Azure OpenAI secrets.
 - Local dev can still use AOAI embeddings by setting the Azure env vars
 
+For a deeper SaaS-focused breakdown (tenant metadata filtering and operational tracing), see `docs/ARCHITECTURE.md`.
+
 ## High-Level Architecture
 
 ### Components

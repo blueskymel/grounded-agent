@@ -14,6 +14,7 @@ from app.llm.grounded_answer import generate_grounded_answer
 from app.observability.errors import format_exception
 from app.observability.logger import log_event
 from app.observability.tools import summarize_tool_calls
+from app.observability.tracing import trace_step
 from app.retrieval.factory import get_retriever
 from app.retrieval.stats import azure_search_doc_stats, faiss_doc_stats
 from app.security.prompt_injection import (
@@ -21,8 +22,7 @@ from app.security.prompt_injection import (
     check_user_message_for_prompt_injection,
     filter_retrieved_chunks_for_prompt_injection,
 )
-from app.schemas.chat import Citation, ToolCall
-from app.schemas.chat import ChatRequest
+from app.schemas.chat import ChatRequest, Citation, ToolCall
 
 
 mcp = FastMCP("grounded-agent")
@@ -65,9 +65,14 @@ def _serialize_doc(item: Any) -> dict[str, Any]:
     return dict(getattr(item, "__dict__", {}))
 
 
-def _build_rag_response(message: str) -> dict[str, Any]:
+def _build_rag_response(message: str, tenant_id: str) -> dict[str, Any]:
     retriever = get_retriever()
-    chunks = retriever.retrieve(message, top_k=5)
+    with trace_step("mcp.retrieval.search"):
+        try:
+            chunks = retriever.retrieve(message, top_k=5, tenant_id=tenant_id)
+        except TypeError:
+            chunks = retriever.retrieve(message, top_k=5)
+
     raw_chunk_count = len(chunks)
     chunks, _ = filter_retrieved_chunks_for_prompt_injection(chunks)
 
@@ -86,7 +91,9 @@ def _build_rag_response(message: str) -> dict[str, Any]:
             "retrieval_backend": settings.retrieval_backend,
         }
 
-    result = generate_grounded_answer(message, chunks)
+    with trace_step("mcp.llm.answer"):
+        result = generate_grounded_answer(message, chunks)
+
     if hasattr(result, "answer"):
         answer = result.answer
         refused = bool(getattr(result, "is_refusal", False))
@@ -119,8 +126,9 @@ def _build_rag_response(message: str) -> dict[str, Any]:
     }
 
 
-def _chat_impl(message: str) -> dict[str, Any]:
-    agent_result = run_agent(message, settings.retrieval_backend)
+def _chat_impl(message: str, tenant_id: str) -> dict[str, Any]:
+    with trace_step("mcp.agent.plan"):
+        agent_result = run_agent(message, settings.retrieval_backend)
 
     if getattr(agent_result, "tool_calls", None):
         tool_calls = [
@@ -134,7 +142,7 @@ def _chat_impl(message: str) -> dict[str, Any]:
             "retrieval_backend": settings.retrieval_backend,
         }
 
-    return _build_rag_response(message)
+    return _build_rag_response(message, tenant_id=tenant_id)
 
 
 @mcp.tool(
@@ -143,10 +151,11 @@ def _chat_impl(message: str) -> dict[str, Any]:
         "with citations."
     )
 )
-def chat(message: str) -> dict:
+def chat(message: str, tenant_id: str | None = None) -> dict:
     """GroundedAgent MCP entrypoint."""
     request_id = str(uuid.uuid4())
     t0 = time.perf_counter()
+    resolved_tenant_id = (tenant_id or settings.default_tenant_id).strip() or settings.default_tenant_id
 
     try:
         # Reuse API schema rules so MCP and HTTP enforce the same constraints.
@@ -165,12 +174,13 @@ def chat(message: str) -> dict:
                 "mcp_chat_blocked_prompt_injection",
                 request_id=request_id,
                 retrieval_backend=settings.retrieval_backend,
+                tenant_id=resolved_tenant_id,
                 total_ms=total_ms,
                 signals=pi_check.matched_signals,
             )
             return _build_response(ok=True, request_id=request_id, data=data, total_ms=total_ms)
 
-        data = _chat_impl(message)
+        data = _chat_impl(message, tenant_id=resolved_tenant_id)
         total_ms = int((time.perf_counter() - t0) * 1000)
 
         tool_calls = data.get("tool_calls", [])
@@ -178,6 +188,7 @@ def chat(message: str) -> dict:
             "mcp_chat",
             request_id=request_id,
             retrieval_backend=settings.retrieval_backend,
+            tenant_id=resolved_tenant_id,
             total_ms=total_ms,
             answer_len=len(str(data.get("answer", ""))),
             citations_count=len(data.get("citations", [])),
@@ -196,6 +207,7 @@ def chat(message: str) -> dict:
             "mcp_chat_error",
             request_id=request_id,
             retrieval_backend=settings.retrieval_backend,
+            tenant_id=resolved_tenant_id,
             total_ms=total_ms,
             error=err,
         )
@@ -211,6 +223,7 @@ def chat(message: str) -> dict:
             "mcp_chat_error",
             request_id=request_id,
             retrieval_backend=settings.retrieval_backend,
+            tenant_id=resolved_tenant_id,
             total_ms=total_ms,
             error=err,
         )

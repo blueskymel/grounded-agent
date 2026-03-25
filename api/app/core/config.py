@@ -12,6 +12,8 @@ class Settings(BaseSettings):
 
     # Feature flag: faiss | azure_search
     retrieval_backend: str = "faiss"
+    default_tenant_id: str = "default"
+    enforce_tenant_header: bool = False
 
     # Azure OpenAI
     azure_openai_endpoint: str | None = None

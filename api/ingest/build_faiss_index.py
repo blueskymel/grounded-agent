@@ -52,6 +52,11 @@ def main() -> None:
     parser.add_argument("--chunk_overlap", type=int, default=int(os.environ.get("CHUNK_OVERLAP", "50")))
     parser.add_argument("--provider", default=os.environ.get("EMBEDDINGS_PROVIDER", "aoai"))
     parser.add_argument(
+        "--tenant-id",
+        default=os.environ.get("DEFAULT_TENANT_ID", "default"),
+        help="Tenant ID stamped into chunk metadata for retrieval isolation.",
+    )
+    parser.add_argument(
         "--ivf-nlist",
         type=int,
         default=DEFAULT_FAISS_NLIST,
@@ -81,7 +86,14 @@ def main() -> None:
             chunk_overlap=args.chunk_overlap,
         )
         for idx, piece in enumerate(pieces):
-            chunks.append({"doc_id": file.stem, "chunk_id": f"{file.stem}-{idx}", "text": piece})
+            chunks.append(
+                {
+                    "doc_id": file.stem,
+                    "chunk_id": f"{file.stem}-{idx}",
+                    "text": piece,
+                    "tenant_id": args.tenant_id,
+                }
+            )
 
     print(f"Total chunks: {len(chunks)}")
 
