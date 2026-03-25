@@ -345,6 +345,24 @@ This enables cost-aware development while supporting production-grade Azure infr
 
 ---
 
+## Security: Prompt Injection Defenses
+
+GroundedAgent includes layered defenses for both direct and indirect prompt injection.
+
+- **Direct user-message checks**: Blocks instruction-override patterns such as attempts to ignore prior instructions, reveal hidden/system prompts, or bypass policy.
+- **Indirect retrieval checks**: Filters suspicious retrieved chunks before answer generation to prevent malicious instructions embedded in source documents.
+- **Safe refusal path**: If a request is flagged or all retrieved chunks are filtered, the assistant refuses with a safe response and does not execute tools.
+- **Coverage across interfaces**: These controls are enforced in both FastAPI (`/chat`, `/chat/stream`) and MCP (`chat` tool) flows.
+
+Implementation references:
+
+- `api/app/security/prompt_injection.py`
+- `api/app/main.py`
+- `api/app/mcp_server.py`
+- `api/tests/test_prompt_injection_guard.py`
+
+---
+
 ## Key Engineering Features
 
 - Bullet-based grounded answers
