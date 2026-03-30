@@ -9,44 +9,98 @@ def test_extract_text_from_txt(tmp_path: Path):
     file_path = tmp_path / "note.txt"
     file_path.write_text("hello world", encoding="utf-8")
 
-    result = dx.extract_text_from_path(file_path)
+    text, prov = dx.extract_text_from_path(file_path)
 
-    assert result == "hello world"
+    assert text == "hello world"
+    assert prov.source_file == "note.txt"
+    assert prov.extraction_method == "text_read"
+
+
+def test_extract_provenance_includes_source_file(tmp_path: Path):
+    file_path = tmp_path / "doc.md"
+    file_path.write_text("markdown content", encoding="utf-8")
+
+    text, prov = dx.extract_text_from_path(file_path)
+
+    assert prov.to_dict()["source_file"] == "doc.md"
+    assert "extraction_method" in prov.to_dict()
 
 
 def test_extract_pdf_uses_embedded_text(monkeypatch, tmp_path: Path):
     file_path = tmp_path / "doc.pdf"
     file_path.write_bytes(b"%PDF-1.4\n")
 
-    monkeypatch.setattr(dx, "_extract_pdf_embedded_text", lambda _path: "embedded text")
+    monkeypatch.setattr(
+        dx,
+        "_extract_pdf_embedded_text",
+        lambda _path: ("embedded text", dx.ExtractionProvenance(
+            source_file="doc.pdf",
+            extraction_method="pdf_embedded",
+            page_count=1,
+        )),
+    )
 
-    result = dx.extract_text_from_path(file_path, ocr_provider="auto", azure_fallback=True)
+    text, prov = dx.extract_text_from_path(file_path, ocr_provider="auto", azure_fallback=True)
 
-    assert result == "embedded text"
+    assert text == "embedded text"
+    assert prov.extraction_method == "pdf_embedded"
 
 
 def test_extract_pdf_falls_back_to_azure(monkeypatch, tmp_path: Path):
     file_path = tmp_path / "scan.pdf"
     file_path.write_bytes(b"%PDF-1.4\n")
 
-    monkeypatch.setattr(dx, "_extract_pdf_embedded_text", lambda _path: "")
-    monkeypatch.setattr(dx, "_ocr_with_azure_document_intelligence", lambda _path: "ocr text")
+    monkeypatch.setattr(
+        dx,
+        "_extract_pdf_embedded_text",
+        lambda _path: ("", dx.ExtractionProvenance(
+            source_file="scan.pdf",
+            extraction_method="pdf_embedded",
+        )),
+    )
+    monkeypatch.setattr(
+        dx,
+        "_ocr_with_azure_document_intelligence",
+        lambda _path: ("ocr text", dx.ExtractionProvenance(
+            source_file="scan.pdf",
+            extraction_method="ocr_azure",
+            ocr_provider="azure_document_intelligence",
+        )),
+    )
 
-    result = dx.extract_text_from_path(file_path, ocr_provider="auto", azure_fallback=True)
+    text, prov = dx.extract_text_from_path(file_path, ocr_provider="auto", azure_fallback=True)
 
-    assert result == "ocr text"
+    assert text == "ocr text"
+    assert prov.extraction_method == "ocr_azure"
+    assert prov.fallback_used is True
 
 
 def test_extract_image_auto_prefers_local_then_azure(monkeypatch, tmp_path: Path):
     file_path = tmp_path / "scan.png"
     file_path.write_bytes(b"not-a-real-png")
 
-    monkeypatch.setattr(dx, "_ocr_with_local_tesseract", lambda _path, _lang: "")
-    monkeypatch.setattr(dx, "_ocr_with_azure_document_intelligence", lambda _path: "azure text")
+    monkeypatch.setattr(
+        dx,
+        "_ocr_with_local_tesseract",
+        lambda _path, _lang: ("", dx.ExtractionProvenance(
+            source_file="scan.png",
+            extraction_method="ocr_local",
+        )),
+    )
+    monkeypatch.setattr(
+        dx,
+        "_ocr_with_azure_document_intelligence",
+        lambda _path: ("azure text", dx.ExtractionProvenance(
+            source_file="scan.png",
+            extraction_method="ocr_azure",
+        )),
+    )
 
-    result = dx.extract_text_from_path(file_path, ocr_provider="auto", azure_fallback=True)
+    text, prov = dx.extract_text_from_path(file_path, ocr_provider="auto", azure_fallback=True)
 
-    assert result == "azure text"
+    assert text == "azure text"
+    assert prov.extraction_method == "ocr_azure"
+    assert prov.fallback_used is True
 
 
 def test_extract_image_auto_raises_without_fallback(monkeypatch, tmp_path: Path):

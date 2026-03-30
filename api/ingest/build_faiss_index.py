@@ -111,7 +111,7 @@ def main() -> None:
     chunks: list[dict] = []
     azure_fallback_enabled = should_use_azure_fallback()
     for file in files:
-        text = extract_text_from_path(
+        text, provenance = extract_text_from_path(
             file,
             ocr_provider=args.ocr_provider,
             ocr_language=args.ocr_language,
@@ -132,6 +132,7 @@ def main() -> None:
                     "chunk_id": f"{file.stem}-{idx}",
                     "text": piece,
                     "tenant_id": args.tenant_id,
+                    "provenance": provenance.to_dict(),
                 }
             )
 

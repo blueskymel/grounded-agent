@@ -301,6 +301,22 @@ Supported input types:
 - `.pdf` (embedded text extraction first, OCR fallback for scanned PDFs)
 - images: `.png`, `.jpg`, `.jpeg`, `.tif`, `.tiff`, `.bmp` (OCR)
 
+**OCR Provenance Tracking**: All chunks store extraction metadata to ensure factual grounding and auditability:
+
+- `source_file`: original file name
+- `extraction_method`: how text was extracted (`text_read`, `pdf_embedded`, `ocr_local`, `ocr_azure`, etc.)
+- `ocr_provider`: which OCR engine was used (`tesseract`, `azure_document_intelligence`)
+- `ocr_language`: language code for OCR (e.g., `eng`)
+- `page_count`: for PDFs, the number of pages processed
+- `fallback_used`: whether OCR fallback was triggered
+- `extraction_notes`: optional notes on extraction process
+
+This provenance metadata is embedded in each chunk (stored in `chunks.jsonl`) and can be used for:
+- Citing which extraction method produced a chunk
+- Filtering results by source type (OCR vs. native text)
+- Auditing and debugging extraction issues
+- Ensuring OCR-derived answers are explicitly traceable
+
 OCR behavior is hybrid by default:
 
 - `OCR_PROVIDER=auto` tries local Tesseract for images and falls back to Azure Document Intelligence when needed
