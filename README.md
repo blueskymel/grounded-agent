@@ -88,7 +88,7 @@ For a deeper SaaS-focused breakdown (tenant metadata filtering and operational t
 ## High-Level Architecture
 
 ### Components
-- **Web UI (React)**: chat UI + citations + tool activity panel
+- **Web UI (Angular)**: chat UI + citations + tool activity panel
 - **API (FastAPI)**: agent orchestrator, retrieval, tools, safety, observability
 - **Ingestion pipeline**: upload → extract → chunk → embed → index
 - **Retrieval backend (feature-flag)**:
