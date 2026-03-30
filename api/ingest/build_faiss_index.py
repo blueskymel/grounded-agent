@@ -12,6 +12,23 @@ import faiss
 from dotenv import load_dotenv
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+try:
+    from ingest.document_extractor import (
+        IMAGE_EXTENSIONS,
+        PDF_EXTENSIONS,
+        TEXT_EXTENSIONS,
+        extract_text_from_path,
+        should_use_azure_fallback,
+    )
+except ModuleNotFoundError:
+    from document_extractor import (  # type: ignore
+        IMAGE_EXTENSIONS,
+        PDF_EXTENSIONS,
+        TEXT_EXTENSIONS,
+        extract_text_from_path,
+        should_use_azure_fallback,
+    )
+
 load_dotenv()
 
 DEFAULT_DIM = int(os.environ.get("MOCK_EMBED_DIM", "384"))
@@ -62,6 +79,16 @@ def main() -> None:
         default=DEFAULT_FAISS_NLIST,
         help="Number of IVF clusters (nlist) for IndexIVFFlat.",
     )
+    parser.add_argument(
+        "--ocr-provider",
+        default=os.environ.get("OCR_PROVIDER", "auto"),
+        help="OCR mode: auto, local, azure, or none.",
+    )
+    parser.add_argument(
+        "--ocr-language",
+        default=os.environ.get("OCR_LANGUAGE", "eng"),
+        help="Language code for local Tesseract OCR.",
+    )
     args = parser.parse_args()
 
     if args.chunk_overlap < 0:
@@ -73,13 +100,26 @@ def main() -> None:
     index_dir = Path(args.out_dir)
     index_dir.mkdir(parents=True, exist_ok=True)
 
-    files = list(data_dir.glob("*.txt")) + list(data_dir.glob("*.md"))
+    supported_extensions = TEXT_EXTENSIONS | PDF_EXTENSIONS | IMAGE_EXTENSIONS
+    files = [file for file in data_dir.iterdir() if file.is_file() and file.suffix.lower() in supported_extensions]
     if not files:
-        raise FileNotFoundError(f"No input docs found in {data_dir} (expected .txt or .md)")
+        raise FileNotFoundError(
+            f"No input docs found in {data_dir} "
+            "(expected txt, md, pdf, png, jpg, jpeg, tif, tiff, or bmp)"
+        )
 
     chunks: list[dict] = []
+    azure_fallback_enabled = should_use_azure_fallback()
     for file in files:
-        text = file.read_text(encoding="utf-8")
+        text = extract_text_from_path(
+            file,
+            ocr_provider=args.ocr_provider,
+            ocr_language=args.ocr_language,
+            azure_fallback=azure_fallback_enabled,
+        )
+        if not text.strip():
+            print(f"Skipping {file.name}: no extractable text found.")
+            continue
         pieces = chunk_text(
             text,
             chunk_size=args.chunk_size,
@@ -94,6 +134,9 @@ def main() -> None:
                     "tenant_id": args.tenant_id,
                 }
             )
+
+    if not chunks:
+        raise ValueError("No chunks generated from input documents after extraction/OCR.")
 
     print(f"Total chunks: {len(chunks)}")
 

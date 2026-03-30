@@ -295,6 +295,27 @@ This process:
 - Generates embeddings
 - Builds a local FAISS IVF Flat vector index (with flat-index fallback for very small corpora)
 
+Supported input types:
+
+- `.txt` and `.md` (direct text read)
+- `.pdf` (embedded text extraction first, OCR fallback for scanned PDFs)
+- images: `.png`, `.jpg`, `.jpeg`, `.tif`, `.tiff`, `.bmp` (OCR)
+
+OCR behavior is hybrid by default:
+
+- `OCR_PROVIDER=auto` tries local Tesseract for images and falls back to Azure Document Intelligence when needed
+- `OCR_PROVIDER=local` uses local Tesseract only
+- `OCR_PROVIDER=azure` uses Azure Document Intelligence OCR
+- `OCR_PROVIDER=none` disables OCR
+
+Optional OCR environment variables:
+
+- `OCR_PROVIDER` (default: `auto`)
+- `OCR_LANGUAGE` (default: `eng`, used by local Tesseract)
+- `OCR_AZURE_FALLBACK` (`true` or `false`, default: `true`)
+- `AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT`
+- `AZURE_DOCUMENT_INTELLIGENCE_KEY`
+
 Optional chunking controls:
 
 ```bash
