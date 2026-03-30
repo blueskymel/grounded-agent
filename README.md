@@ -108,7 +108,7 @@ For a deeper SaaS-focused breakdown (tenant metadata filtering and operational t
 
 ```mermaid
 flowchart LR
-  U[User] --> UI[React Web UI]
+  U[User] --> UI[Angular Web UI]
   UI -->|/chat| API[FastAPI API]
 
   subgraph Orchestration
