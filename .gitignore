@@ -24,7 +24,9 @@ Thumbs.db
 # Local data / indexes
 data/
 !api/data/
+api/data/*
 !api/data/raw/
+api/data/raw/*
 !api/data/raw/retail_network_escalation.md
 !api/data/raw/store_pos_recovery_checklist.txt
 !api/data/raw/scanned_store_incident.pdf
