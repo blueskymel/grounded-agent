@@ -1,0 +1,8 @@
+Store POS Recovery Checklist
+
+- Confirm store uplink and router status LEDs.
+- Restart POS middleware service on local controller.
+- Validate transaction retries complete without new declines.
+- Run one test sale and one refund.
+- Confirm receipt printer and barcode scanner connectivity.
+- Notify incident channel that store is back to normal operations.
