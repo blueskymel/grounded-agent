@@ -19,6 +19,14 @@ export class ApiService {
     return this.http.post<ChatResponse>(`${this.base}/chat`, { message });
   }
 
+  chatBefore(message: string): Observable<ChatResponse> {
+    return this.http.post<ChatResponse>(`${this.base}/chat/before`, { message });
+  }
+
+  chatAfter(message: string): Observable<ChatResponse> {
+    return this.http.post<ChatResponse>(`${this.base}/chat/after`, { message });
+  }
+
   streamChat(
     message: string,
     onToken: (token: string) => void,

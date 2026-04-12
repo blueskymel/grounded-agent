@@ -138,8 +138,7 @@ def list_docs(response: Response):
     return faiss_doc_stats()
 
 
-@app.post("/chat", response_model=ChatResponse)
-def chat(req: ChatRequest, request: Request):
+def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = None):
 
     request_id = getattr(request.state, "request_id", None)
     backend = settings.retrieval_backend
@@ -287,7 +286,7 @@ def chat(req: ChatRequest, request: Request):
             t_llm0 = time.perf_counter()
 
             with trace_step("llm.answer"):
-                result = generate_grounded_answer(req.message, chunks)
+                result = generate_grounded_answer(req.message, chunks, mode_override=mode_override)
 
             llm_ms = int((time.perf_counter() - t_llm0) * 1000)
 
@@ -370,6 +369,21 @@ def chat(req: ChatRequest, request: Request):
         )
 
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.post("/chat", response_model=ChatResponse)
+def chat(req: ChatRequest, request: Request):
+    return _chat_impl(req, request, mode_override=None)
+
+
+@app.post("/chat/before", response_model=ChatResponse)
+def chat_before(req: ChatRequest, request: Request):
+    return _chat_impl(req, request, mode_override="unsafe")
+
+
+@app.post("/chat/after", response_model=ChatResponse)
+def chat_after(req: ChatRequest, request: Request):
+    return _chat_impl(req, request, mode_override="safe")
 
 @app.post("/chat/stream")
 async def chat_stream(req: ChatRequest, request: Request):

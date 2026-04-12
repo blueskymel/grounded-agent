@@ -14,13 +14,16 @@ class GroundedResult:
     is_refusal: bool
 
 
-def _hallucination_demo_mode() -> str:
-    mode = os.environ.get("HALLUCINATION_DEMO_MODE", "safe").strip().lower()
+def _hallucination_demo_mode(mode_override: str | None = None) -> str:
+    if mode_override:
+        mode = mode_override.strip().lower()
+    else:
+        mode = os.environ.get("HALLUCINATION_DEMO_MODE", "safe").strip().lower()
     return mode if mode in {"safe", "unsafe"} else "safe"
 
 
-def _is_unsafe_demo_mode() -> bool:
-    return _hallucination_demo_mode() == "unsafe"
+def _is_unsafe_demo_mode(mode_override: str | None = None) -> bool:
+    return _hallucination_demo_mode(mode_override) == "unsafe"
 
 SYSTEM_PROMPT = """Context:
 You are GroundedAgent, an IT Ops assistant. You are given a user QUESTION and a SOURCES block with retrieved runbook chunks.
@@ -189,9 +192,13 @@ def _generate_aoai_chat_response(user_prompt: str, unsafe_mode: bool = False) ->
 
     return (resp.choices[0].message.content or "").strip()
 
-def generate_grounded_answer(question: str, chunks: List[RetrievedChunk]) -> GroundedResult:
+def generate_grounded_answer(
+    question: str,
+    chunks: List[RetrievedChunk],
+    mode_override: str | None = None,
+) -> GroundedResult:
     provider = os.environ.get("LLM_PROVIDER", "aoai").lower().strip()
-    unsafe_demo_mode = _is_unsafe_demo_mode()
+    unsafe_demo_mode = _is_unsafe_demo_mode(mode_override)
 
     if unsafe_demo_mode and provider == "mock":
         # Intentional anti-pattern for FDE demos: return a plausible answer that
@@ -199,6 +206,13 @@ def generate_grounded_answer(question: str, chunks: List[RetrievedChunk]) -> Gro
         return GroundedResult(
             answer="- The platform provides a 99.99% SLA and can auto-fail over cross-region in under 5 minutes.",
             is_refusal=False,
+        )
+
+    # Deterministic demo behavior for explicit safe endpoint.
+    if mode_override == "safe" and _SLA_TERMS.search(question):
+        return GroundedResult(
+            answer="I don't have enough information in the provided runbooks to answer that.",
+            is_refusal=True,
         )
 
     # Hard refusal rule: if user asks for SLA/SLO/RTO/RPO, only answer if sources explicitly mention it
@@ -302,9 +316,13 @@ SOURCES:
         is_refusal=False,
     )
 
-def stream_grounded_answer(question: str, chunks: List[RetrievedChunk]) -> Iterator[str]:
+def stream_grounded_answer(
+    question: str,
+    chunks: List[RetrievedChunk],
+    mode_override: str | None = None,
+) -> Iterator[str]:
     provider = os.environ.get("LLM_PROVIDER", "aoai").lower().strip()
-    unsafe_demo_mode = _is_unsafe_demo_mode()
+    unsafe_demo_mode = _is_unsafe_demo_mode(mode_override)
 
     refusal_text = "I don't have enough information in the provided runbooks to answer that."
 
@@ -316,7 +334,7 @@ def stream_grounded_answer(question: str, chunks: List[RetrievedChunk]) -> Itera
     if provider == "mock":
         # Mock mode cannot do real token streaming from a model,
         # so we stream the already-generated answer word by word.
-        result = generate_grounded_answer(question, chunks)
+        result = generate_grounded_answer(question, chunks, mode_override=mode_override)
         answer = result.answer if hasattr(result, "answer") else str(result)
         for word in answer.split():
             yield word + " "
