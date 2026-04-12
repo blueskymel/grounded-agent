@@ -13,6 +13,15 @@ class GroundedResult:
     answer: str
     is_refusal: bool
 
+
+def _hallucination_demo_mode() -> str:
+    mode = os.environ.get("HALLUCINATION_DEMO_MODE", "safe").strip().lower()
+    return mode if mode in {"safe", "unsafe"} else "safe"
+
+
+def _is_unsafe_demo_mode() -> bool:
+    return _hallucination_demo_mode() == "unsafe"
+
 SYSTEM_PROMPT = """Context:
 You are GroundedAgent, an IT Ops assistant. You are given a user QUESTION and a SOURCES block with retrieved runbook chunks.
 
@@ -164,7 +173,7 @@ def _normalize_bullets(bullets: list[str]) -> str:
     return "\n".join(bullets)
 
 
-def _generate_aoai_chat_response(user_prompt: str) -> str:
+def _generate_aoai_chat_response(user_prompt: str, unsafe_mode: bool = False) -> str:
     client = get_aoai_client()
     deployment = get_chat_deployment()
 
@@ -174,7 +183,7 @@ def _generate_aoai_chat_response(user_prompt: str) -> str:
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ],
-        temperature=0.2,
+        temperature=0.9 if unsafe_mode else 0.2,
         max_tokens=400,
     )
 
@@ -182,10 +191,19 @@ def _generate_aoai_chat_response(user_prompt: str) -> str:
 
 def generate_grounded_answer(question: str, chunks: List[RetrievedChunk]) -> GroundedResult:
     provider = os.environ.get("LLM_PROVIDER", "aoai").lower().strip()
+    unsafe_demo_mode = _is_unsafe_demo_mode()
+
+    if unsafe_demo_mode and provider == "mock":
+        # Intentional anti-pattern for FDE demos: return a plausible answer that
+        # is not constrained by retrieved evidence.
+        return GroundedResult(
+            answer="- The platform provides a 99.99% SLA and can auto-fail over cross-region in under 5 minutes.",
+            is_refusal=False,
+        )
 
     # Hard refusal rule: if user asks for SLA/SLO/RTO/RPO, only answer if sources explicitly mention it
     # Applies to BOTH aoai and mock modes.
-    if _SLA_TERMS.search(question) and not _sources_explicitly_define_terms(chunks):
+    if (not unsafe_demo_mode) and _SLA_TERMS.search(question) and not _sources_explicitly_define_terms(chunks):
         return GroundedResult(
             answer="I don't have enough information in the provided runbooks to answer that.",
             is_refusal=True,
@@ -232,7 +250,7 @@ def generate_grounded_answer(question: str, chunks: List[RetrievedChunk]) -> Gro
 
     # ---- AOAI path ----
 
-    if not is_answerable(question, chunks):
+    if (not unsafe_demo_mode) and (not is_answerable(question, chunks)):
         return GroundedResult(
             answer="I don't have enough information in the provided runbooks to answer that.",
             is_refusal=True,
@@ -253,9 +271,12 @@ SOURCES:
             raw = generate_grounded_answer_lcel(question=question, sources_text=sources_text)
         except Exception:
             # Safe fallback to the legacy completion path if LCEL orchestration fails.
-            raw = _generate_aoai_chat_response(user_prompt)
+            raw = _generate_aoai_chat_response(user_prompt, unsafe_mode=unsafe_demo_mode)
     else:
-        raw = _generate_aoai_chat_response(user_prompt)
+        raw = _generate_aoai_chat_response(user_prompt, unsafe_mode=unsafe_demo_mode)
+
+    if unsafe_demo_mode:
+        return GroundedResult(answer=raw, is_refusal=False)
 
     bullets = _extract_bullets(raw)
 
@@ -283,11 +304,12 @@ SOURCES:
 
 def stream_grounded_answer(question: str, chunks: List[RetrievedChunk]) -> Iterator[str]:
     provider = os.environ.get("LLM_PROVIDER", "aoai").lower().strip()
+    unsafe_demo_mode = _is_unsafe_demo_mode()
 
     refusal_text = "I don't have enough information in the provided runbooks to answer that."
 
     # Same refusal rule as non-streaming path
-    if _SLA_TERMS.search(question) and not _sources_explicitly_define_terms(chunks):
+    if (not unsafe_demo_mode) and _SLA_TERMS.search(question) and not _sources_explicitly_define_terms(chunks):
         yield refusal_text
         return
 
@@ -300,7 +322,7 @@ def stream_grounded_answer(question: str, chunks: List[RetrievedChunk]) -> Itera
             yield word + " "
         return
 
-    if not is_answerable(question, chunks):
+    if (not unsafe_demo_mode) and (not is_answerable(question, chunks)):
         yield refusal_text
         return
 
@@ -321,7 +343,7 @@ SOURCES:
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ],
-        temperature=0.2,
+        temperature=0.9 if unsafe_demo_mode else 0.2,
         max_tokens=400,
         stream=True,
     )

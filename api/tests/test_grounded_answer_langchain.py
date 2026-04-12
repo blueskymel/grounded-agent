@@ -26,7 +26,7 @@ def test_generate_grounded_answer_uses_langchain_framework(monkeypatch):
     monkeypatch.setattr(
         ga,
         "_generate_aoai_chat_response",
-        lambda _prompt: (_ for _ in ()).throw(AssertionError("legacy AOAI path should not run")),
+        lambda _prompt, **_kwargs: (_ for _ in ()).throw(AssertionError("legacy AOAI path should not run")),
     )
 
     result = ga.generate_grounded_answer("How do I recover the service?", chunks)
@@ -50,10 +50,38 @@ def test_generate_grounded_answer_langchain_fallback_to_legacy(monkeypatch):
     monkeypatch.setattr(
         ga,
         "_generate_aoai_chat_response",
-        lambda _prompt: "- Restart worker process. [runbook1#c1]",
+        lambda _prompt, **_kwargs: "- Restart worker process. [runbook1#c1]",
     )
 
     result = ga.generate_grounded_answer("How do I recover the worker?", chunks)
 
     assert result.is_refusal is False
     assert result.answer.strip().endswith("[runbook1#c1]")
+
+
+def test_generate_grounded_answer_unsafe_demo_mode_can_hallucinate(monkeypatch):
+    from app.llm import grounded_answer as ga
+
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    monkeypatch.setenv("HALLUCINATION_DEMO_MODE", "unsafe")
+
+    chunks = [DummyChunk(doc_id="runbook1", chunk_id="c1", text="Restart worker process.")]
+
+    result = ga.generate_grounded_answer("What is the SLA for this service?", chunks)
+
+    assert result.is_refusal is False
+    assert "99.99% SLA" in result.answer
+
+
+def test_generate_grounded_answer_safe_mode_refuses_missing_sla(monkeypatch):
+    from app.llm import grounded_answer as ga
+
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    monkeypatch.setenv("HALLUCINATION_DEMO_MODE", "safe")
+
+    chunks = [DummyChunk(doc_id="runbook1", chunk_id="c1", text="Restart worker process.")]
+
+    result = ga.generate_grounded_answer("What is the SLA for this service?", chunks)
+
+    assert result.is_refusal is True
+    assert result.answer == "I don't have enough information in the provided runbooks to answer that."
