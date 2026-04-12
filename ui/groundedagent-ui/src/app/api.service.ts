@@ -5,7 +5,9 @@ import { ChatResponse, HealthResponse } from './api.types';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
-  private base = '/api';
+  private base = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+    ? 'https://grounded-agent-api.orangewave-2d52a1ea.eastus2.azurecontainerapps.io'
+    : '/api';
 
   constructor(private http: HttpClient) {}
 

@@ -56,50 +56,90 @@ import { ChatResponse } from './api.types'
 
     <!-- FDE Demo Instructions -->
     <div class="demo-guide">
-      <div class="demo-header" (click)="guideOpen = !guideOpen" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
-        <h2 style="margin:0; font-size:1rem;">🚀 FDE Demo: Hallucination Issue &amp; Fix</h2>
-        <span style="font-size:0.8rem; color:#666;">{{ guideOpen ? '▲ collapse' : '▼ expand' }}</span>
+      <div class="demo-header" (click)="guideOpen = !guideOpen">
+        <span class="demo-title">The Hallucination Problem &amp; How We Fixed It</span>
+        <span class="demo-toggle">{{ guideOpen ? '▲ collapse' : '▼ expand' }}</span>
       </div>
 
       <div *ngIf="guideOpen" class="demo-body">
-        <p class="demo-intro">This chat is connected to <strong>GroundedAgent</strong> — an agentic RAG copilot that answers questions grounded in IT runbooks with citations. The demo below shows how hallucination issues appear and how they are fixed.</p>
 
-        <div class="demo-step step-bad">
-          <div class="step-label">⚠️ Step 1 — Issue Path (Unsafe Mode)</div>
-          <div class="step-desc">Run the API with grounding checks disabled. Ask the chat: <em>"What is the SLA for this service?"</em></div>
-          <div class="step-desc">Expected: a plausible <strong>but fabricated</strong> SLA answer — the hallucination.</div>
-          <pre class="code-block">$env:LLM_PROVIDER = "mock"
-$env:HALLUCINATION_DEMO_MODE = "unsafe"
-python -m uvicorn app.main:app --reload --app-dir .</pre>
+        <p class="demo-intro">
+          <strong>GroundedAgent</strong> is an AI copilot that answers IT questions using company runbooks.
+          The problem: the AI was <em>making up answers</em> instead of admitting when information was missing.
+          Here's the issue and the fix, side-by-side.
+        </p>
+
+        <!-- Before / After side-by-side -->
+        <div class="ba-grid">
+
+          <!-- BEFORE -->
+          <div class="ba-col">
+            <div class="ba-label bad">❌ Before — AI fabricates an answer</div>
+            <div class="fake-thread">
+              <div class="fake-user">What is the SLA for this service?</div>
+              <div class="fake-bot bad-bot">
+                <div class="bot-text">
+                  The platform provides a <strong>99.99% uptime SLA</strong> with cross-region
+                  failover in under 5 minutes. Incidents exceeding this threshold qualify for
+                  service credits per the enterprise agreement.
+                </div>
+                <div class="hallucination-tag">⚠️ Fabricated — no SLA exists in any runbook</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- AFTER -->
+          <div class="ba-col">
+            <div class="ba-label good">✅ After — AI refuses to guess</div>
+            <div class="fake-thread">
+              <div class="fake-user">What is the SLA for this service?</div>
+              <div class="fake-bot good-bot">
+                <div class="bot-text">
+                  I don't have enough information in the provided runbooks to answer that.
+                </div>
+                <div class="grounded-tag">✅ Grounded — only answers what's in the docs</div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /ba-grid -->
+
+        <!-- The fix -->
+        <div class="fix-row">
+          <span class="fix-label">The fix</span>
+          <span class="fix-desc">One environment variable switches the guardrail on or off:</span>
+          <div class="diff-block">
+            <div class="diff-remove">HALLUCINATION_DEMO_MODE=<strong>unsafe</strong> &nbsp;← fabricates answers</div>
+            <div class="diff-add">HALLUCINATION_DEMO_MODE=<strong>safe</strong> &nbsp;&nbsp;&nbsp;← refuses to guess ✓</div>
+          </div>
         </div>
 
-        <div class="demo-step step-good">
-          <div class="step-label">✅ Step 2 — Fix Path (Safe Mode)</div>
-          <div class="step-desc">Switch one env var and ask the same question.</div>
-          <div class="step-desc">Expected: <strong>"I don't have enough information in the provided runbooks to answer that."</strong></div>
-          <pre class="code-block">$env:LLM_PROVIDER = "mock"
-$env:HALLUCINATION_DEMO_MODE = "safe"   ← only change
-python -m uvicorn app.main:app --reload --app-dir .</pre>
+        <!-- Automated proof -->
+        <div class="proof-row">
+          <div class="proof-label">🧪 Locked in by automated tests</div>
+          <div class="proof-tests">
+            <div class="test-pass">✓ &nbsp;test_unsafe_mode_can_hallucinate</div>
+            <div class="test-pass">✓ &nbsp;test_safe_mode_refuses_missing_sla</div>
+          </div>
         </div>
 
-        <div class="demo-step step-test">
-          <div class="step-label">🧪 Step 3 — Automated Proof</div>
-          <div class="step-desc">Run regression tests that lock in both behaviours:</div>
-          <pre class="code-block">pytest tests/test_grounded_answer_langchain.py -v</pre>
+        <!-- Client rollout -->
+        <div class="rollout-row">
+          <div class="rollout-label">🌐 Works for any client</div>
+          <div class="rollout-items">
+            <div class="rollout-item">One codebase — the same fix ships to every client unchanged</div>
+            <div class="rollout-item"><code>safe</code> is the default in all environments</div>
+            <div class="rollout-item"><code>unsafe</code> is only allowed in isolated demo sandboxes</div>
+          </div>
         </div>
 
-        <div class="demo-step step-client">
-          <div class="step-label">🌐 Client Rollout Pattern</div>
-          <ul class="client-list">
-            <li><strong>One codebase</strong> — deploy unchanged to any client.</li>
-            <li><strong>Per-client env config</strong> — <code>HALLUCINATION_DEMO_MODE=safe</code> is the default everywhere.</li>
-            <li><strong>Demo sandboxes only</strong> — <code>unsafe</code> is allowed only in isolated dev subscriptions.</li>
-            <li><strong>CI gate</strong> — pipeline fails if <code>unsafe</code> is detected outside approved environments.</li>
-          </ul>
+        <!-- CTA -->
+        <div class="cta-row">
+          👆 Try it live — type <em>"What is the SLA for this service?"</em> in the chat
         </div>
+
       </div>
     </div>
-
     <h3>Tool Activity</h3>
 
     <div *ngFor="let t of toolCalls">
@@ -222,7 +262,7 @@ overflow:auto;
   border: 1px solid #c7d2fe;
   border-radius: 8px;
   margin-bottom: 16px;
-  background: #f5f3ff;
+  background: #fafafa;
   overflow: hidden;
 }
 .demo-header {
@@ -230,35 +270,84 @@ overflow:auto;
   background: #ede9fe;
   border-bottom: 1px solid #c7d2fe;
   user-select: none;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
-.demo-header h2 { color: #4f46e5; }
-.demo-body { padding: 12px 14px; font-size: 0.82rem; }
-.demo-intro { margin: 0 0 10px; color: #374151; }
-.demo-step {
-  margin-bottom: 10px;
-  border-radius: 6px;
-  padding: 8px 10px;
-  border-left: 4px solid #a78bfa;
-}
-.step-bad  { background: #fff7ed; border-left-color: #f97316; }
-.step-good { background: #f0fdf4; border-left-color: #22c55e; }
-.step-test { background: #eff6ff; border-left-color: #3b82f6; }
-.step-client { background: #f9fafb; border-left-color: #6b7280; }
-.step-label { font-weight: 700; margin-bottom: 4px; font-size: 0.83rem; }
-.step-desc { color: #4b5563; margin-bottom: 4px; }
-.code-block {
-  background: #1e1e2e;
-  color: #cdd6f4;
-  border-radius: 4px;
-  padding: 8px 10px;
+.demo-title { font-weight: 700; font-size: 0.9rem; color: #4f46e5; }
+.demo-toggle { font-size: 0.75rem; color: #6b7280; }
+.demo-body { padding: 12px 14px; font-size: 0.8rem; }
+.demo-intro { margin: 0 0 12px; color: #374151; line-height: 1.5; }
+
+/* Before / After grid */
+.ba-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.ba-col { display: flex; flex-direction: column; gap: 6px; }
+.ba-label { font-weight: 700; font-size: 0.75rem; padding: 3px 6px; border-radius: 4px; }
+.ba-label.bad  { background: #fee2e2; color: #b91c1c; }
+.ba-label.good { background: #dcfce7; color: #15803d; }
+.fake-thread { display: flex; flex-direction: column; gap: 4px; }
+.fake-user {
+  align-self: flex-end;
+  background: #dbeafe;
+  color: #1e40af;
+  padding: 5px 8px;
+  border-radius: 10px 10px 2px 10px;
   font-size: 0.75rem;
-  overflow-x: auto;
-  margin: 4px 0 0;
-  white-space: pre;
+  max-width: 90%;
 }
-.client-list { margin: 4px 0 0 16px; padding: 0; color: #374151; }
-.client-list li { margin-bottom: 3px; }
-.client-list code { background: #e5e7eb; padding: 1px 4px; border-radius: 3px; font-size: 0.75rem; }
+.fake-bot {
+  border-radius: 2px 10px 10px 10px;
+  padding: 6px 8px;
+  font-size: 0.75rem;
+  max-width: 95%;
+}
+.fake-bot.bad-bot  { background: #fef3c7; border: 1px solid #f59e0b; }
+.fake-bot.good-bot { background: #f0fdf4; border: 1px solid #86efac; }
+.bot-text { margin-bottom: 4px; line-height: 1.4; }
+.hallucination-tag {
+  font-size: 0.7rem; color: #b45309; font-style: italic;
+  border-top: 1px dashed #f59e0b; padding-top: 3px; margin-top: 2px;
+}
+.grounded-tag {
+  font-size: 0.7rem; color: #15803d; font-style: italic;
+  border-top: 1px dashed #86efac; padding-top: 3px; margin-top: 2px;
+}
+
+/* The fix */
+.fix-row {
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;
+  padding: 8px 10px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 4px;
+}
+.fix-label { font-weight: 700; font-size: 0.78rem; color: #374151; }
+.fix-desc  { font-size: 0.75rem; color: #6b7280; }
+.diff-block { font-family: monospace; font-size: 0.72rem; margin-top: 2px; }
+.diff-remove { background: #fee2e2; color: #b91c1c; padding: 2px 6px; border-radius: 3px; margin-bottom: 2px; }
+.diff-add    { background: #dcfce7; color: #15803d; padding: 2px 6px; border-radius: 3px; }
+
+/* Tests */
+.proof-row {
+  background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px;
+  padding: 8px 10px; margin-bottom: 10px;
+}
+.proof-label { font-weight: 700; font-size: 0.78rem; color: #1d4ed8; margin-bottom: 4px; }
+.test-pass { font-family: monospace; font-size: 0.73rem; color: #15803d; }
+
+/* Rollout */
+.rollout-row {
+  background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;
+  padding: 8px 10px; margin-bottom: 10px;
+}
+.rollout-label { font-weight: 700; font-size: 0.78rem; color: #374151; margin-bottom: 4px; }
+.rollout-item { font-size: 0.75rem; color: #4b5563; margin-bottom: 2px; }
+.rollout-item::before { content: "→ "; color: #9ca3af; }
+.rollout-item code { background: #e5e7eb; padding: 1px 4px; border-radius: 3px; }
+
+/* CTA */
+.cta-row {
+  background: #fdf4ff; border: 1px solid #e9d5ff; border-radius: 6px;
+  padding: 8px 10px; font-size: 0.78rem; color: #7e22ce; font-style: italic;
+}
 .api-banner {
   background: #fff3cd;
   border: 1px solid #ffc107;

@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 
 from fastapi import FastAPI, Request, HTTPException, Response
+from fastapi.middleware.cors import CORSMiddleware
 from app.llm.grounded_answer import generate_grounded_answer, stream_grounded_answer
 from app.core.config import settings
 from app.schemas.chat import ChatRequest, ChatResponse, Citation, ToolCall
@@ -19,6 +20,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 import time
 import uuid
+import os
 
 from app.observability.logger import log_event
 from app.observability.errors import format_exception
@@ -61,6 +63,18 @@ logging.getLogger("openai").setLevel(logging.WARNING)
 init_app_insights(settings.applicationinsights_connection_string)
 
 app = FastAPI(title="GroundedAgent API", version="0.1.0")
+
+_ALLOWED_ORIGINS = [o.strip() for o in
+        (os.environ.get("CORS_ORIGINS",
+            "http://localhost:4200,https://blue-pond-03f20770f.6.azurestaticapps.net")).split(",")
+        if o.strip()]
+
+app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_ALLOWED_ORIGINS,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["*"],
+)
 
 
 @app.middleware("http")
