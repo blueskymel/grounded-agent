@@ -1,13 +1,25 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core'
 import { CommonModule } from '@angular/common'
 import { FormsModule } from '@angular/forms'
-import { ApiService } from './api.service'
+import { ApiService, ChatResult } from './api.service'
 import { ChatResponse } from './api.types'
 
 type DemoMessage = {
   role: 'user' | 'assistant'
   text: string
   citations?: Array<{ doc_id: string; score?: number }>
+  trace?: ObsTrace
+}
+
+type ObsTrace = {
+  endpoint: 'before' | 'after'
+  requestId?: string
+  question: string
+  answer: string
+  retrievalBackend: string
+  timings?: ChatResponse['timings']
+  citations: ChatResponse['citations']
+  retrievedChunks: ChatResponse['retrieved_chunks']
 }
 
 @Component({
@@ -39,6 +51,9 @@ type DemoMessage = {
                   <span class="cite-score">Confidence: {{formatConfidence(c.score)}}</span>
                 </div>
               </div>
+              <button *ngIf="m.role === 'assistant' && m.trace" class="trace-link" (click)="openTrace(m.trace)">
+                Behind the scenes
+              </button>
             </div>
           </div>
         </div>
@@ -69,6 +84,9 @@ type DemoMessage = {
                   <span class="cite-score">Confidence: {{formatConfidence(c.score)}}</span>
                 </div>
               </div>
+              <button *ngIf="m.role === 'assistant' && m.trace" class="trace-link" (click)="openTrace(m.trace)">
+                Behind the scenes
+              </button>
             </div>
           </div>
         </div>
@@ -119,6 +137,55 @@ type DemoMessage = {
 
     </div>
   </main>
+
+  <div class="trace-modal-backdrop" *ngIf="traceModalOpen && selectedTrace" (click)="closeTrace()">
+    <div class="trace-modal" (click)="$event.stopPropagation()">
+      <div class="trace-head">
+        <h3>Observability: decision trace</h3>
+        <button class="trace-close" (click)="closeTrace()">Close</button>
+      </div>
+
+      <div class="trace-meta">
+        <div><b>Endpoint:</b> {{selectedTrace.endpoint === 'before' ? 'BEFORE (unsafe path)' : 'AFTER (safe path)'}}</div>
+        <div><b>Request ID:</b> {{selectedTrace.requestId || 'N/A'}}</div>
+        <div><b>Retrieval backend:</b> {{selectedTrace.retrievalBackend}}</div>
+        <div><b>Question:</b> {{selectedTrace.question}}</div>
+      </div>
+
+      <div class="trace-section" *ngIf="selectedTrace.timings">
+        <h4>Timing breakdown (ms)</h4>
+        <div class="trace-grid">
+          <div>retrieval: {{selectedTrace.timings?.retrieval_ms ?? 0}}</div>
+          <div>embed: {{selectedTrace.timings?.embed_ms ?? 0}}</div>
+          <div>search: {{selectedTrace.timings?.search_ms ?? 0}}</div>
+          <div>llm: {{selectedTrace.timings?.llm_ms ?? 0}}</div>
+          <div>total: {{selectedTrace.timings?.total_ms ?? 0}}</div>
+        </div>
+      </div>
+
+      <div class="trace-section">
+        <h4>Citations and confidence</h4>
+        <div class="trace-row" *ngFor="let c of selectedTrace.citations">
+          <span>{{c.doc_id}}</span>
+          <span>{{formatConfidence(c.score)}}</span>
+        </div>
+        <div *ngIf="!selectedTrace.citations?.length" class="trace-empty">No citations returned.</div>
+      </div>
+
+      <div class="trace-section">
+        <h4>Retrieved chunk scores</h4>
+        <div class="trace-row" *ngFor="let rc of selectedTrace.retrievedChunks">
+          <span>{{rc.doc_id}}#{{rc.chunk_id}}</span>
+          <span>{{formatConfidence(rc.score)}}</span>
+        </div>
+        <div *ngIf="!selectedTrace.retrievedChunks?.length" class="trace-empty">No retrieval debug rows returned.</div>
+      </div>
+
+      <div class="trace-note">
+        FDE production troubleshooting tip: use the Request ID to correlate this chat decision with backend chat_request logs in Container App logs.
+      </div>
+    </div>
+  </div>
 </div>
   `,
   styles: [`
@@ -258,6 +325,17 @@ type DemoMessage = {
   white-space: nowrap;
 }
 
+.trace-link {
+  margin-top: 6px;
+  border: none;
+  background: transparent;
+  color: #2563eb;
+  text-decoration: underline;
+  font-size: 0.74rem;
+  padding: 0;
+  cursor: pointer;
+}
+
 .input-row {
   display: flex;
   gap: 8px;
@@ -344,6 +422,96 @@ type DemoMessage = {
   word-break: break-word;
 }
 
+.trace-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.trace-modal {
+  width: min(760px, 92vw);
+  max-height: 86vh;
+  overflow: auto;
+  background: #ffffff;
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  padding: 12px;
+}
+
+.trace-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.trace-head h3 {
+  margin: 0;
+  font-size: 0.98rem;
+}
+
+.trace-close {
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #f9fafb;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+
+.trace-meta {
+  font-size: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.trace-section {
+  border-top: 1px solid #e5e7eb;
+  padding-top: 8px;
+  margin-top: 8px;
+}
+
+.trace-section h4 {
+  margin: 0 0 6px;
+  font-size: 0.84rem;
+}
+
+.trace-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  font-size: 0.78rem;
+}
+
+.trace-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.77rem;
+  padding: 4px 0;
+  border-bottom: 1px dashed #e5e7eb;
+}
+
+.trace-empty {
+  font-size: 0.76rem;
+  color: #6b7280;
+}
+
+.trace-note {
+  margin-top: 10px;
+  font-size: 0.76rem;
+  color: #374151;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px;
+}
+
 @media (max-width: 980px) {
   .layout {
     flex-direction: column;
@@ -383,6 +551,9 @@ export class AppComponent implements OnInit {
   beforeLastAnswer = ''
   afterLastAnswer = ''
 
+  traceModalOpen = false
+  selectedTrace: ObsTrace | null = null
+
   constructor(private api: ApiService, private cdr: ChangeDetectorRef) {}
 
   ngOnInit() {
@@ -407,16 +578,18 @@ export class AppComponent implements OnInit {
     this.beforeMessages = [...this.beforeMessages, { role: 'user', text: msg }]
 
     this.api.chatBefore(msg).subscribe({
-      next: (res: ChatResponse) => {
+      next: (res: ChatResult) => {
+        const data = res.data
         this.beforeMessages = [
           ...this.beforeMessages,
           {
             role: 'assistant',
-            text: res.answer,
-            citations: (res.citations ?? []).map(c => ({ doc_id: c.doc_id, score: c.score }))
+            text: data.answer,
+            citations: (data.citations ?? []).map(c => ({ doc_id: c.doc_id, score: c.score })),
+            trace: this.buildTrace('before', msg, res)
           }
         ]
-        this.beforeLastAnswer = res.answer
+        this.beforeLastAnswer = data.answer
         this.beforeSending = false
         this.cdr.detectChanges()
       },
@@ -440,16 +613,18 @@ export class AppComponent implements OnInit {
     this.afterMessages = [...this.afterMessages, { role: 'user', text: msg }]
 
     this.api.chatAfter(msg).subscribe({
-      next: (res: ChatResponse) => {
+      next: (res: ChatResult) => {
+        const data = res.data
         this.afterMessages = [
           ...this.afterMessages,
           {
             role: 'assistant',
-            text: res.answer,
-            citations: (res.citations ?? []).map(c => ({ doc_id: c.doc_id, score: c.score }))
+            text: data.answer,
+            citations: (data.citations ?? []).map(c => ({ doc_id: c.doc_id, score: c.score })),
+            trace: this.buildTrace('after', msg, res)
           }
         ]
-        this.afterLastAnswer = res.answer
+        this.afterLastAnswer = data.answer
         this.afterSending = false
         this.cdr.detectChanges()
       },
@@ -468,5 +643,29 @@ export class AppComponent implements OnInit {
     if (score === undefined || score === null) return 'N/A'
     const pct = Math.max(0, Math.min(100, score * 100))
     return `${pct.toFixed(1)}%`
+  }
+
+  openTrace(trace: ObsTrace): void {
+    this.selectedTrace = trace
+    this.traceModalOpen = true
+  }
+
+  closeTrace(): void {
+    this.traceModalOpen = false
+    this.selectedTrace = null
+  }
+
+  private buildTrace(endpoint: 'before' | 'after', question: string, result: ChatResult): ObsTrace {
+    const data = result.data
+    return {
+      endpoint,
+      requestId: result.requestId,
+      question,
+      answer: data.answer,
+      retrievalBackend: data.retrieval_backend,
+      timings: data.timings,
+      citations: data.citations ?? [],
+      retrievedChunks: data.retrieved_chunks ?? [],
+    }
   }
 }

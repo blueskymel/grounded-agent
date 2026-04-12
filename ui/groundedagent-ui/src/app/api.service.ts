@@ -1,7 +1,12 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { HttpClient, HttpResponse } from '@angular/common/http';
+import { map, Observable } from 'rxjs';
 import { ChatResponse, HealthResponse } from './api.types';
+
+export type ChatResult = {
+  data: ChatResponse;
+  requestId?: string;
+}
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -19,12 +24,22 @@ export class ApiService {
     return this.http.post<ChatResponse>(`${this.base}/chat`, { message });
   }
 
-  chatBefore(message: string): Observable<ChatResponse> {
-    return this.http.post<ChatResponse>(`${this.base}/chat/before`, { message });
+  chatBefore(message: string): Observable<ChatResult> {
+    return this.http.post<ChatResponse>(`${this.base}/chat/before`, { message }, { observe: 'response' }).pipe(
+      map((res: HttpResponse<ChatResponse>) => ({
+        data: res.body as ChatResponse,
+        requestId: res.headers.get('x-request-id') ?? undefined,
+      }))
+    );
   }
 
-  chatAfter(message: string): Observable<ChatResponse> {
-    return this.http.post<ChatResponse>(`${this.base}/chat/after`, { message });
+  chatAfter(message: string): Observable<ChatResult> {
+    return this.http.post<ChatResponse>(`${this.base}/chat/after`, { message }, { observe: 'response' }).pipe(
+      map((res: HttpResponse<ChatResponse>) => ({
+        data: res.body as ChatResponse,
+        requestId: res.headers.get('x-request-id') ?? undefined,
+      }))
+    );
   }
 
   streamChat(
