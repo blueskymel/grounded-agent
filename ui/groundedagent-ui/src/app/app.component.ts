@@ -7,7 +7,7 @@ import { ChatResponse } from './api.types'
 type DemoMessage = {
   role: 'user' | 'assistant'
   text: string
-  citations?: Array<{ doc_id: string; chunk_id: string }>
+  citations?: Array<{ doc_id: string; score?: number }>
 }
 
 @Component({
@@ -34,7 +34,10 @@ type DemoMessage = {
             <div class="bubble" [class.user-bubble]="m.role === 'user'" [class.assistant-bubble]="m.role === 'assistant'">
               <div class="bubble-text">{{m.text}}</div>
               <div class="cite-list" *ngIf="m.citations?.length">
-                <span *ngFor="let c of m.citations">{{c.doc_id}}#{{c.chunk_id}}</span>
+                <div *ngFor="let c of m.citations" class="cite-item">
+                  <span class="cite-doc">Citation: {{c.doc_id}}</span>
+                  <span class="cite-score">Confidence: {{formatConfidence(c.score)}}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -61,7 +64,10 @@ type DemoMessage = {
             <div class="bubble" [class.user-bubble]="m.role === 'user'" [class.assistant-bubble]="m.role === 'assistant'">
               <div class="bubble-text">{{m.text}}</div>
               <div class="cite-list" *ngIf="m.citations?.length">
-                <span *ngFor="let c of m.citations">{{c.doc_id}}#{{c.chunk_id}}</span>
+                <div *ngFor="let c of m.citations" class="cite-item">
+                  <span class="cite-doc">Citation: {{c.doc_id}}</span>
+                  <span class="cite-score">Confidence: {{formatConfidence(c.score)}}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -227,10 +233,29 @@ type DemoMessage = {
 .cite-list {
   margin-top: 6px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cite-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
   font-size: 0.72rem;
-  color: #6b7280;
+  color: #4b5563;
+  background: #eef2f7;
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+.cite-doc {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.cite-score {
+  color: #374151;
+  white-space: nowrap;
 }
 
 .input-row {
@@ -388,7 +413,7 @@ export class AppComponent implements OnInit {
           {
             role: 'assistant',
             text: res.answer,
-            citations: (res.citations ?? []).map(c => ({ doc_id: c.doc_id, chunk_id: c.chunk_id }))
+            citations: (res.citations ?? []).map(c => ({ doc_id: c.doc_id, score: c.score }))
           }
         ]
         this.beforeLastAnswer = res.answer
@@ -421,7 +446,7 @@ export class AppComponent implements OnInit {
           {
             role: 'assistant',
             text: res.answer,
-            citations: (res.citations ?? []).map(c => ({ doc_id: c.doc_id, chunk_id: c.chunk_id }))
+            citations: (res.citations ?? []).map(c => ({ doc_id: c.doc_id, score: c.score }))
           }
         ]
         this.afterLastAnswer = res.answer
@@ -437,5 +462,11 @@ export class AppComponent implements OnInit {
         this.cdr.detectChanges()
       }
     })
+  }
+
+  formatConfidence(score?: number): string {
+    if (score === undefined || score === null) return 'N/A'
+    const pct = Math.max(0, Math.min(100, score * 100))
+    return `${pct.toFixed(1)}%`
   }
 }
