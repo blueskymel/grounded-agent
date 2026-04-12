@@ -49,6 +49,52 @@ import { ChatResponse } from './api.types'
  <main class="main">
   <div class="side">
 
+    <!-- FDE Demo Instructions -->
+    <div class="demo-guide">
+      <div class="demo-header" (click)="guideOpen = !guideOpen" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
+        <h2 style="margin:0; font-size:1rem;">🚀 FDE Demo: Hallucination Issue &amp; Fix</h2>
+        <span style="font-size:0.8rem; color:#666;">{{ guideOpen ? '▲ collapse' : '▼ expand' }}</span>
+      </div>
+
+      <div *ngIf="guideOpen" class="demo-body">
+        <p class="demo-intro">This chat is connected to <strong>GroundedAgent</strong> — an agentic RAG copilot that answers questions grounded in IT runbooks with citations. The demo below shows how hallucination issues appear and how they are fixed.</p>
+
+        <div class="demo-step step-bad">
+          <div class="step-label">⚠️ Step 1 — Issue Path (Unsafe Mode)</div>
+          <div class="step-desc">Run the API with grounding checks disabled. Ask the chat: <em>"What is the SLA for this service?"</em></div>
+          <div class="step-desc">Expected: a plausible <strong>but fabricated</strong> SLA answer — the hallucination.</div>
+          <pre class="code-block">$env:LLM_PROVIDER = "mock"
+$env:HALLUCINATION_DEMO_MODE = "unsafe"
+python -m uvicorn app.main:app --reload --app-dir .</pre>
+        </div>
+
+        <div class="demo-step step-good">
+          <div class="step-label">✅ Step 2 — Fix Path (Safe Mode)</div>
+          <div class="step-desc">Switch one env var and ask the same question.</div>
+          <div class="step-desc">Expected: <strong>"I don't have enough information in the provided runbooks to answer that."</strong></div>
+          <pre class="code-block">$env:LLM_PROVIDER = "mock"
+$env:HALLUCINATION_DEMO_MODE = "safe"   ← only change
+python -m uvicorn app.main:app --reload --app-dir .</pre>
+        </div>
+
+        <div class="demo-step step-test">
+          <div class="step-label">🧪 Step 3 — Automated Proof</div>
+          <div class="step-desc">Run regression tests that lock in both behaviours:</div>
+          <pre class="code-block">pytest tests/test_grounded_answer_langchain.py -v</pre>
+        </div>
+
+        <div class="demo-step step-client">
+          <div class="step-label">🌐 Client Rollout Pattern</div>
+          <ul class="client-list">
+            <li><strong>One codebase</strong> — deploy unchanged to any client.</li>
+            <li><strong>Per-client env config</strong> — <code>HALLUCINATION_DEMO_MODE=safe</code> is the default everywhere.</li>
+            <li><strong>Demo sandboxes only</strong> — <code>unsafe</code> is allowed only in isolated dev subscriptions.</li>
+            <li><strong>CI gate</strong> — pipeline fails if <code>unsafe</code> is detected outside approved environments.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
     <h3>Tool Activity</h3>
 
     <div *ngFor="let t of toolCalls">
@@ -165,6 +211,49 @@ overflow:auto;
   min-height: 0;          /* also important for nested flex scroll */
   overflow: auto;
 }
+
+/* FDE Demo Guide */
+.demo-guide {
+  border: 1px solid #c7d2fe;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  background: #f5f3ff;
+  overflow: hidden;
+}
+.demo-header {
+  padding: 10px 14px;
+  background: #ede9fe;
+  border-bottom: 1px solid #c7d2fe;
+  user-select: none;
+}
+.demo-header h2 { color: #4f46e5; }
+.demo-body { padding: 12px 14px; font-size: 0.82rem; }
+.demo-intro { margin: 0 0 10px; color: #374151; }
+.demo-step {
+  margin-bottom: 10px;
+  border-radius: 6px;
+  padding: 8px 10px;
+  border-left: 4px solid #a78bfa;
+}
+.step-bad  { background: #fff7ed; border-left-color: #f97316; }
+.step-good { background: #f0fdf4; border-left-color: #22c55e; }
+.step-test { background: #eff6ff; border-left-color: #3b82f6; }
+.step-client { background: #f9fafb; border-left-color: #6b7280; }
+.step-label { font-weight: 700; margin-bottom: 4px; font-size: 0.83rem; }
+.step-desc { color: #4b5563; margin-bottom: 4px; }
+.code-block {
+  background: #1e1e2e;
+  color: #cdd6f4;
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-size: 0.75rem;
+  overflow-x: auto;
+  margin: 4px 0 0;
+  white-space: pre;
+}
+.client-list { margin: 4px 0 0 16px; padding: 0; color: #374151; }
+.client-list li { margin-bottom: 3px; }
+.client-list code { background: #e5e7eb; padding: 1px 4px; border-radius: 3px; font-size: 0.75rem; }
 `]
 })
 export class AppComponent implements OnInit {
@@ -196,6 +285,8 @@ export class AppComponent implements OnInit {
   timings: any = null
 
   isSending = false
+
+  guideOpen = true
 
   constructor(private api: ApiService, private cdr: ChangeDetectorRef) {}
 
