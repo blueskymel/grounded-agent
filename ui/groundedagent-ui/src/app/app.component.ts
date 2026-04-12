@@ -35,13 +35,18 @@ import { ChatResponse } from './api.types'
 
     </div>
 
+    <div *ngIf="apiStatus === 'down'" class="api-banner">
+      ⚠️ <strong>API not reachable.</strong> The backend is not running. To use the chat, start the local API — see the demo guide on the right.
+    </div>
+
     <div class="input">
         <input
         [(ngModel)]="draft"
         placeholder="Ask something..."
         (keydown.enter)="onEnter($event)"
+        [disabled]="apiStatus === 'down'"
         />
-        <button (click)="send()" [disabled]="isSending">Send</button>
+        <button (click)="send()" [disabled]="isSending || apiStatus === 'down'">Send</button>
     </div>
 
   </div>
@@ -254,6 +259,15 @@ overflow:auto;
 .client-list { margin: 4px 0 0 16px; padding: 0; color: #374151; }
 .client-list li { margin-bottom: 3px; }
 .client-list code { background: #e5e7eb; padding: 1px 4px; border-radius: 3px; font-size: 0.75rem; }
+.api-banner {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  color: #856404;
+  margin-bottom: 8px;
+}
 `]
 })
 export class AppComponent implements OnInit {
@@ -288,9 +302,16 @@ export class AppComponent implements OnInit {
 
   guideOpen = true
 
+  apiStatus: 'checking' | 'up' | 'down' = 'checking'
+
   constructor(private api: ApiService, private cdr: ChangeDetectorRef) {}
 
-  ngOnInit(){}
+  ngOnInit() {
+    this.api.health().subscribe({
+      next: () => { this.apiStatus = 'up'; this.cdr.detectChanges() },
+      error: () => { this.apiStatus = 'down'; this.cdr.detectChanges() }
+    })
+  }
 
 onEnter(event: Event) {
   event.preventDefault()
@@ -356,7 +377,7 @@ send() {
 
       const errorMsg = {
         role: 'assistant',
-        text: 'Error: request failed.'
+        text: 'Error: could not reach the API. Make sure the backend is running locally (see the demo guide →)'
       }
 
       if (idx >= 0) {
