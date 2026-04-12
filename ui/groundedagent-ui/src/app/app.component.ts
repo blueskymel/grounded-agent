@@ -111,14 +111,6 @@ type DemoMessage = {
         </div>
       </section>
 
-      <section class="explain-card neutral-card">
-        <h3>How to demo to Luke and Andrew</h3>
-        <ol>
-          <li>Ask both chats the same question, for example: "What is the SLA for this service?"</li>
-          <li>Point out the BEFORE answer sounds confident but is not trustworthy.</li>
-          <li>Point out the AFTER answer avoids guessing and stays evidence-first.</li>
-        </ol>
-      </section>
     </div>
   </main>
 </div>
