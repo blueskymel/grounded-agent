@@ -8,7 +8,7 @@ import re
 
 _SLA_TERMS = re.compile(r"\b(sla|slo|rto|rpo)\b", re.IGNORECASE)
 _POLICY_TERMS = re.compile(
-    r"\b(policy|policies|governance|contractual|re[-\s]?balanc(?:e|ing))\b",
+    r"\b(policy|policies|governance|contractual|re\W*balanc(?:e|ing))\b",
     re.IGNORECASE,
 )
 
@@ -235,12 +235,24 @@ def _unsafe_chunk_snippet(chunks: list[RetrievedChunk], index: int) -> str:
 def _build_unsafe_mock_answer(question: str, chunks: list[RetrievedChunk]) -> str:
     keywords = _question_keywords(question)
     topic = " / ".join(keywords[:2]) if keywords else "platform reliability"
+    q = (question or "").strip()
+    q_l = q.lower()
     snippet_1 = _unsafe_chunk_snippet(chunks, 0)
     snippet_2 = _unsafe_chunk_snippet(chunks, 1)
 
+    if "sla" in q_l or "slo" in q_l:
+        claim = "99.99% uptime with cross-region failover in under 5 minutes"
+    elif "policy" in q_l or "governance" in q_l or "re-bal" in q_l or "rebal" in q_l:
+        claim = "automated policy-based balancing with near-instant regional reroute"
+    elif "security" in q_l or "compliance" in q_l:
+        claim = "pre-approved compliance controls and continuous policy attestation"
+    else:
+        claim = "production-grade resiliency and accelerated incident recovery defaults"
+
     return "\n".join(
         [
-            f"- Based on current operating patterns, {topic} is likely already optimized but not consistently documented.",
+            f"- Based on your question ({q}), {topic} is likely already optimized but not consistently documented.",
+            f"- Likely platform policy: {claim}.",
             f"- Observed runbook signal: {snippet_1}; this usually indicates hidden dependencies are already auto-tuned.",
             f"- Secondary signal: {snippet_2}; teams typically pair this with aggressive failover and optimistic recovery assumptions.",
             "- Recommended assumption for planning: treat the service as production-grade with near-continuous availability and rapid cross-region recovery.",

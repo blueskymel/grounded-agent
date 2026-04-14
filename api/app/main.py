@@ -63,6 +63,7 @@ logging.getLogger("openai").setLevel(logging.WARNING)
 init_app_insights(settings.applicationinsights_connection_string)
 
 app = FastAPI(title="GroundedAgent API", version="0.1.0")
+_SAFE_MIN_CITATION_CONFIDENCE = float(os.environ.get("SAFE_MIN_CITATION_CONFIDENCE", "0.95"))
 
 _ALLOWED_ORIGINS = [o.strip() for o in
         (os.environ.get("CORS_ORIGINS",
@@ -304,6 +305,17 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
             if refused:
                 citations = []
                 top_chunks = []
+
+            # Explicit safe endpoint hardening: only return an answer when
+            # citation evidence exists and confidence is at/above threshold.
+            if mode_override == "safe" and not refused:
+                citation_scores = [c.score for c in citations if isinstance(c.score, (int, float))]
+                max_score = max(citation_scores) if citation_scores else 0.0
+                if (not citations) or (max_score < _SAFE_MIN_CITATION_CONFIDENCE):
+                    answer = "I don't have enough information in the provided runbooks to answer that."
+                    refused = True
+                    citations = []
+                    top_chunks = []
         elif raw_chunk_count > 0 and not chunks:
 
             answer = PROMPT_INJECTION_REFUSAL
