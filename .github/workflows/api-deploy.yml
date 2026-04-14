@@ -1,0 +1,97 @@
+name: API Deploy
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy-api:
+    runs-on: ubuntu-latest
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_ACR_NAME: ${{ secrets.AZURE_ACR_NAME }}
+      AZURE_ACR_LOGIN_SERVER: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
+      AZURE_CONTAINERAPP_RESOURCE_GROUP: ${{ secrets.AZURE_CONTAINERAPP_RESOURCE_GROUP }}
+      AZURE_CONTAINERAPP_NAME: ${{ secrets.AZURE_CONTAINERAPP_NAME }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify deployment secrets
+        id: precheck
+        run: |
+          missing=0
+          for key in \
+            AZURE_CLIENT_ID \
+            AZURE_TENANT_ID \
+            AZURE_SUBSCRIPTION_ID \
+            AZURE_ACR_NAME \
+            AZURE_ACR_LOGIN_SERVER \
+            AZURE_CONTAINERAPP_RESOURCE_GROUP \
+            AZURE_CONTAINERAPP_NAME
+          do
+            if [ -z "${!key}" ]; then
+              echo "Missing required secret: ${key}"
+              missing=1
+            fi
+          done
+
+          if [ "$missing" -eq 1 ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip deployment when secrets are missing
+        if: ${{ steps.precheck.outputs.ready != 'true' }}
+        run: |
+          echo "Required Azure deploy secrets are missing."
+          echo "Skipping API deployment run."
+
+      - name: Azure login (OIDC)
+        if: ${{ steps.precheck.outputs.ready == 'true' }}
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push API image
+        if: ${{ steps.precheck.outputs.ready == 'true' }}
+        run: |
+          set -euxo pipefail
+          IMAGE_TAG="${GITHUB_SHA}"
+          IMAGE="${AZURE_ACR_LOGIN_SERVER}/grounded-agent-api:${IMAGE_TAG}"
+
+          az acr login --name "${AZURE_ACR_NAME}"
+          docker build -f docker/api.Dockerfile -t "${IMAGE}" .
+          docker push "${IMAGE}"
+
+          echo "IMAGE=${IMAGE}" >> "$GITHUB_ENV"
+
+      - name: Update Azure Container App
+        if: ${{ steps.precheck.outputs.ready == 'true' }}
+        run: |
+          set -euxo pipefail
+          az containerapp update \
+            --name "${AZURE_CONTAINERAPP_NAME}" \
+            --resource-group "${AZURE_CONTAINERAPP_RESOURCE_GROUP}" \
+            --image "${IMAGE}"
+
+      - name: Smoke test API health endpoint
+        if: ${{ steps.precheck.outputs.ready == 'true' }}
+        run: |
+          set -euxo pipefail
+          FQDN=$(az containerapp show \
+            --name "${AZURE_CONTAINERAPP_NAME}" \
+            --resource-group "${AZURE_CONTAINERAPP_RESOURCE_GROUP}" \
+            --query properties.configuration.ingress.fqdn -o tsv)
+
+          curl --fail --show-error --silent "https://${FQDN}/health"
