@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import re
 
 
 @dataclass
@@ -70,7 +71,28 @@ def test_generate_grounded_answer_unsafe_demo_mode_can_hallucinate(monkeypatch):
     result = ga.generate_grounded_answer("What is the SLA for this service?", chunks)
 
     assert result.is_refusal is False
-    assert "99.99% SLA" in result.answer
+    assert "- " in result.answer
+    assert "likely" in result.answer.lower()
+    assert re.search(r"\[[^\[\]#]+#[^\[\]]+\]", result.answer) is None
+
+
+def test_generate_grounded_answer_unsafe_demo_mode_varies_by_question(monkeypatch):
+    from app.llm import grounded_answer as ga
+
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    monkeypatch.setenv("HALLUCINATION_DEMO_MODE", "unsafe")
+
+    chunks = [
+        DummyChunk(doc_id="runbook1", chunk_id="c1", text="Restart worker process and verify service health."),
+        DummyChunk(doc_id="runbook2", chunk_id="c2", text="Escalate to on-call if dependency latency exceeds threshold."),
+    ]
+
+    answer_a = ga.generate_grounded_answer("What is the SLA for this service?", chunks)
+    answer_b = ga.generate_grounded_answer("How should we recover after dependency latency spikes?", chunks)
+
+    assert answer_a.is_refusal is False
+    assert answer_b.is_refusal is False
+    assert answer_a.answer != answer_b.answer
 
 
 def test_generate_grounded_answer_safe_mode_refuses_missing_sla(monkeypatch):

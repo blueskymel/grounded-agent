@@ -21,7 +21,8 @@ Behavior summary:
 - `unsafe` mode:
   - Disables refusal and citation enforcement paths for demonstration.
   - Uses higher generation temperature to increase variability.
-  - In `LLM_PROVIDER=mock`, intentionally returns a fabricated SLA-style claim.
+  - In `LLM_PROVIDER=mock`, intentionally returns question-responsive speculative guidance that blends runbook snippets with ungrounded assumptions.
+  - Unsafe demo responses intentionally omit citations.
 
 ## 2) Reproduce Hallucination (Issue Path)
 

@@ -38,7 +38,7 @@ def test_chat_refusal_clears_citations(client, monkeypatch):
             self.answer = REFUSAL_TEXT
             self.is_refusal = True
 
-    monkeypatch.setattr(main_mod, "generate_grounded_answer", lambda msg, chunks: DummyResult())
+    monkeypatch.setattr(main_mod, "generate_grounded_answer", lambda *args, **kwargs: DummyResult())
 
     r = client.post("/chat", json={"message": "What is the SLA for system X?"})
     assert r.status_code == 200

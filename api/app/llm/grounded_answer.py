@@ -82,6 +82,31 @@ ANSWER:
 I don't have enough information in the provided runbooks to answer that.
 """
 
+UNSAFE_SYSTEM_PROMPT = """Context:
+You are GroundedAgent in demo mode. You are given a user QUESTION and optional SOURCES.
+
+Objectives:
+- Provide a confident, helpful answer even when evidence is incomplete.
+- You may extrapolate from SOURCES and fill gaps with plausible operational assumptions.
+- Do not refuse to answer due to missing evidence.
+
+Style:
+- Be concise and action-oriented.
+- Use 3-5 bullets.
+
+Tone:
+- Confident and direct.
+- Present likely guidance as if it is actionable.
+
+Response:
+- Output a bulleted list (each line starts with "- ").
+- Do not include citations.
+"""
+
+
+def _system_prompt_for_mode(unsafe_mode: bool) -> str:
+    return UNSAFE_SYSTEM_PROMPT if unsafe_mode else SYSTEM_PROMPT
+
 def _sources_explicitly_define_terms(chunks, terms_regex=_SLA_TERMS) -> bool:
     """Return True if any retrieved chunk explicitly contains the requested terms."""
     for c in chunks:
@@ -176,14 +201,58 @@ def _normalize_bullets(bullets: list[str]) -> str:
     return "\n".join(bullets)
 
 
+def _question_keywords(question: str, max_terms: int = 4) -> list[str]:
+    stop = {
+        "what", "which", "when", "where", "why", "how", "for", "with", "this",
+        "that", "from", "into", "your", "about", "service", "system", "the", "and",
+        "are", "can", "you", "our", "does", "should", "have", "need", "after",
+    }
+    terms: list[str] = []
+    for tok in re.findall(r"[a-z0-9]+", (question or "").lower()):
+        if len(tok) < 3 or tok in stop:
+            continue
+        if tok not in terms:
+            terms.append(tok)
+        if len(terms) >= max_terms:
+            break
+    return terms
+
+
+def _unsafe_chunk_snippet(chunks: list[RetrievedChunk], index: int) -> str:
+    if index >= len(chunks):
+        return "runbook signals indicate recurring operational instability"
+    text = (chunks[index].text or "").strip().replace("\n", " ")
+    text = " ".join(text.split())
+    if len(text) > 120:
+        text = text[:120].rstrip() + "..."
+    return text or "runbook signals indicate recurring operational instability"
+
+
+def _build_unsafe_mock_answer(question: str, chunks: list[RetrievedChunk]) -> str:
+    keywords = _question_keywords(question)
+    topic = " / ".join(keywords[:2]) if keywords else "platform reliability"
+    snippet_1 = _unsafe_chunk_snippet(chunks, 0)
+    snippet_2 = _unsafe_chunk_snippet(chunks, 1)
+
+    return "\n".join(
+        [
+            f"- Based on current operating patterns, {topic} is likely already optimized but not consistently documented.",
+            f"- Observed runbook signal: {snippet_1}; this usually indicates hidden dependencies are already auto-tuned.",
+            f"- Secondary signal: {snippet_2}; teams typically pair this with aggressive failover and optimistic recovery assumptions.",
+            "- Recommended assumption for planning: treat the service as production-grade with near-continuous availability and rapid cross-region recovery.",
+        ]
+    )
+
+
 def _generate_aoai_chat_response(user_prompt: str, unsafe_mode: bool = False) -> str:
     client = get_aoai_client()
     deployment = get_chat_deployment()
+    system_prompt = _system_prompt_for_mode(unsafe_mode)
 
     resp = client.chat.completions.create(
         model=deployment,
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
         temperature=0.9 if unsafe_mode else 0.2,
@@ -201,10 +270,10 @@ def generate_grounded_answer(
     unsafe_demo_mode = _is_unsafe_demo_mode(mode_override)
 
     if unsafe_demo_mode and provider == "mock":
-        # Intentional anti-pattern for FDE demos: return a plausible answer that
-        # is not constrained by retrieved evidence.
+        # Intentional anti-pattern for FDE demos: blend retrieved snippets with
+        # speculation so answer is question-aware but still ungrounded.
         return GroundedResult(
-            answer="- The platform provides a 99.99% SLA and can auto-fail over cross-region in under 5 minutes.",
+            answer=_build_unsafe_mock_answer(question, chunks),
             is_refusal=False,
         )
 
@@ -280,7 +349,7 @@ SOURCES:
 """
 
     answer_framework = os.environ.get("ANSWER_FRAMEWORK", "classic").lower().strip()
-    if answer_framework == "langchain":
+    if answer_framework == "langchain" and (not unsafe_demo_mode):
         try:
             raw = generate_grounded_answer_lcel(question=question, sources_text=sources_text)
         except Exception:
@@ -358,7 +427,7 @@ SOURCES:
     stream = client.chat.completions.create(
         model=deployment,
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": _system_prompt_for_mode(unsafe_demo_mode)},
             {"role": "user", "content": user_prompt},
         ],
         temperature=0.9 if unsafe_demo_mode else 0.2,
