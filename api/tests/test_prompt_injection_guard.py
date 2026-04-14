@@ -81,7 +81,7 @@ def test_chat_filters_injected_retrieval_chunk(client, monkeypatch):
         answer = "- Restart service. [runbook2#c2]"
         is_refusal = False
 
-    def fake_answer(_message, chunks):
+    def fake_answer(_message, chunks, **_kwargs):
         captured["chunks"] = chunks
         return DummyResult()
 

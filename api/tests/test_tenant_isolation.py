@@ -43,7 +43,7 @@ def test_chat_passes_tenant_id_to_retriever(client, monkeypatch):
         answer = "- use tenant runbook [tenant_doc#c1]"
         is_refusal = False
 
-    monkeypatch.setattr(main_mod, "generate_grounded_answer", lambda *_: DummyResult())
+    monkeypatch.setattr(main_mod, "generate_grounded_answer", lambda *args, **kwargs: DummyResult())
 
     r = client.post(
         "/chat",
