@@ -109,6 +109,30 @@ type ObsTrace = {
     <div class="explain">
       <h2>What is wrong before vs fixed after</h2>
 
+      <section class="explain-card neutral-card">
+        <h3>Hallucination vs not hallucination</h3>
+        <ul>
+          <li><b>Hallucination:</b> the answer states facts that are not supported by retrieved runbook evidence.</li>
+          <li><b>Not hallucination:</b> the answer is explicitly grounded in retrieved chunks, or the model refuses when evidence is insufficient.</li>
+          <li><b>Looks correct is not enough:</b> even plausible text is unsafe if it cannot be traced to cited docs.</li>
+          <li><b>In this demo:</b> BEFORE may fabricate policy details; AFTER should cite evidence or say it cannot answer.</li>
+        </ul>
+      </section>
+
+      <section class="explain-card neutral-card">
+        <h3>Try prompts that usually produce stronger citations</h3>
+        <div class="example-list">
+          <div class="example-item" *ngFor="let ex of citationExamples">
+            <div class="example-label">{{ex.label}}</div>
+            <div class="example-prompt">{{ex.prompt}}</div>
+            <div class="example-actions">
+              <button (click)="runExampleAfter(ex.prompt)" [disabled]="apiStatus === 'down' || afterSending">Run in AFTER</button>
+              <button (click)="runExampleBefore(ex.prompt)" [disabled]="apiStatus === 'down' || beforeSending">Run in BEFORE</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="explain-card bad-card">
         <h3>Before: what is wrong</h3>
         <ul>
@@ -508,6 +532,52 @@ type ObsTrace = {
   padding: 8px;
 }
 
+.example-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.example-item {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 8px;
+}
+
+.example-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #374151;
+  margin-bottom: 4px;
+}
+
+.example-prompt {
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: #111827;
+  margin-bottom: 7px;
+}
+
+.example-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.example-actions button {
+  font-size: 0.75rem;
+  padding: 5px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #f9fafb;
+  cursor: pointer;
+}
+
+.example-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 @media (max-width: 980px) {
   .layout {
     flex-direction: column;
@@ -534,6 +604,25 @@ type ObsTrace = {
 })
 export class AppComponent implements OnInit {
   apiStatus: 'checking' | 'up' | 'down' = 'checking'
+
+  citationExamples = [
+    {
+      label: 'P1 process scope',
+      prompt: 'Based only on the runbooks, summarize the P1 incident response steps and include concrete escalation checkpoints.'
+    },
+    {
+      label: 'Communication cadence',
+      prompt: 'What communication cadence is required for a P1 incident, and who must be updated according to the runbooks?'
+    },
+    {
+      label: 'Rollback criteria',
+      prompt: 'List the deployment rollback criteria and immediate actions from the incident runbooks.'
+    },
+    {
+      label: 'Handoff requirements',
+      prompt: 'What on-call handoff requirements are documented for critical incidents?'
+    }
+  ]
 
   beforeDraft = ''
   afterDraft = ''
@@ -633,6 +722,18 @@ export class AppComponent implements OnInit {
         this.cdr.detectChanges()
       }
     })
+  }
+
+  runExampleBefore(prompt: string): void {
+    if (this.apiStatus === 'down' || this.beforeSending) return
+    this.beforeDraft = prompt
+    this.sendBefore()
+  }
+
+  runExampleAfter(prompt: string): void {
+    if (this.apiStatus === 'down' || this.afterSending) return
+    this.afterDraft = prompt
+    this.sendAfter()
   }
 
   formatConfidence(score?: number): string {
