@@ -45,15 +45,11 @@ jobs:
 
           if [ "$missing" -eq 1 ]; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Missing required Azure deploy secrets. Failing this run so non-deploy is explicit."
+            exit 1
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Skip deployment when secrets are missing
-        if: ${{ steps.precheck.outputs.ready != 'true' }}
-        run: |
-          echo "Required Azure deploy secrets are missing."
-          echo "Skipping API deployment run."
 
       - name: Azure login (OIDC)
         if: ${{ steps.precheck.outputs.ready == 'true' }}
