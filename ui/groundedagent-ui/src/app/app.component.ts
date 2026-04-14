@@ -116,10 +116,6 @@ type ObsTrace = {
           <li>For high-risk policy questions, it does not reliably force a refusal.</li>
           <li>This creates business risk because fake policy facts look authoritative.</li>
         </ul>
-        <div class="evidence" *ngIf="beforeLastAnswer">
-          <div class="evidence-label">Live evidence from BEFORE endpoint</div>
-          <div class="evidence-text">{{beforeLastAnswer}}</div>
-        </div>
       </section>
 
       <section class="explain-card good-card">
