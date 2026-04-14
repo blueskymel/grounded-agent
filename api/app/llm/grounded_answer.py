@@ -8,7 +8,7 @@ import re
 
 _SLA_TERMS = re.compile(r"\b(sla|slo|rto|rpo)\b", re.IGNORECASE)
 _POLICY_TERMS = re.compile(
-    r"\b(policy|policies|governance|compliance|contractual|re[-\s]?balanc(?:e|ing))\b",
+    r"\b(policy|policies|governance|contractual|re[-\s]?balanc(?:e|ing))\b",
     re.IGNORECASE,
 )
 
