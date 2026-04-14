@@ -26,7 +26,8 @@ ENV LLM_PROVIDER=mock
 RUN EMBEDDINGS_PROVIDER=mock python ingest/build_faiss_index.py \
     --input_dir data/raw \
     --out_dir data/index \
-    --provider mock
+    --provider mock \
+    --ocr-provider none
 
 EXPOSE 8000
 
