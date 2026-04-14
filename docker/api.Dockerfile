@@ -22,6 +22,12 @@ ENV RETRIEVAL_BACKEND=faiss
 ENV EMBEDDINGS_PROVIDER=mock
 ENV LLM_PROVIDER=mock
 
+# Build FAISS index from committed raw docs at image build time (no Azure creds needed)
+RUN EMBEDDINGS_PROVIDER=mock python ingest/build_faiss_index.py \
+    --input_dir data/raw \
+    --out_dir data/index \
+    --provider mock
+
 EXPOSE 8000
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
