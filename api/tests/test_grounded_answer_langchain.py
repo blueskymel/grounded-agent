@@ -107,3 +107,37 @@ def test_generate_grounded_answer_safe_mode_refuses_missing_sla(monkeypatch):
 
     assert result.is_refusal is True
     assert result.answer == "I don't have enough information in the provided runbooks to answer that."
+
+
+def test_generate_grounded_answer_safe_mode_refuses_missing_policy(monkeypatch):
+    from app.llm import grounded_answer as ga
+
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    monkeypatch.setenv("HALLUCINATION_DEMO_MODE", "safe")
+
+    chunks = [DummyChunk(doc_id="runbook1", chunk_id="c1", text="Restart worker process.")]
+
+    result = ga.generate_grounded_answer("What is our re-balancing policy?", chunks)
+
+    assert result.is_refusal is True
+    assert result.answer == "I don't have enough information in the provided runbooks to answer that."
+
+
+def test_generate_grounded_answer_safe_mode_allows_when_policy_evidence_exists(monkeypatch):
+    from app.llm import grounded_answer as ga
+
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    monkeypatch.setenv("HALLUCINATION_DEMO_MODE", "safe")
+
+    chunks = [
+        DummyChunk(
+            doc_id="runbook1",
+            chunk_id="c1",
+            text="Re-balancing policy: route overflow traffic to region B and rollback within 15 minutes if error rate rises.",
+        )
+    ]
+
+    result = ga.generate_grounded_answer("What is our re-balancing policy?", chunks)
+
+    assert result.is_refusal is False
+    assert "[runbook1#c1]" in result.answer

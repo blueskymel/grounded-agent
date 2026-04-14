@@ -7,6 +7,10 @@ from dataclasses import dataclass
 import re
 
 _SLA_TERMS = re.compile(r"\b(sla|slo|rto|rpo)\b", re.IGNORECASE)
+_POLICY_TERMS = re.compile(
+    r"\b(policy|policies|governance|compliance|contractual|re[-\s]?balanc(?:e|ing))\b",
+    re.IGNORECASE,
+)
 
 @dataclass
 class GroundedResult:
@@ -287,6 +291,14 @@ def generate_grounded_answer(
     # Hard refusal rule: if user asks for SLA/SLO/RTO/RPO, only answer if sources explicitly mention it
     # Applies to BOTH aoai and mock modes.
     if (not unsafe_demo_mode) and _SLA_TERMS.search(question) and not _sources_explicitly_define_terms(chunks):
+        return GroundedResult(
+            answer="I don't have enough information in the provided runbooks to answer that.",
+            is_refusal=True,
+        )
+
+    # Safe-mode policy guard: refuse when policy-like questions are asked but sources
+    # do not explicitly contain policy evidence (for example re-balancing policy).
+    if (not unsafe_demo_mode) and _POLICY_TERMS.search(question) and not _sources_explicitly_define_terms(chunks, _POLICY_TERMS):
         return GroundedResult(
             answer="I don't have enough information in the provided runbooks to answer that.",
             is_refusal=True,

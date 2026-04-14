@@ -113,7 +113,7 @@ type ObsTrace = {
         <h3>Before: what is wrong</h3>
         <ul>
           <li>The model can invent confident statements not proven by runbooks.</li>
-          <li>For high-risk questions like SLA, it does not force a refusal.</li>
+          <li>For high-risk policy questions, it does not reliably force a refusal.</li>
           <li>This creates business risk because fake policy facts look authoritative.</li>
         </ul>
         <div class="evidence" *ngIf="beforeLastAnswer">
@@ -126,7 +126,7 @@ type ObsTrace = {
         <h3>After: what is fixed and how</h3>
         <ul>
           <li>Guardrails enforce grounded answers and refusal when evidence is missing.</li>
-          <li>The safe path blocks unsupported SLA-style claims.</li>
+          <li>The safe path blocks unsupported policy claims, not just one policy type.</li>
           <li>The fix is implemented at the backend policy layer, not just prompt wording.</li>
         </ul>
         <div class="evidence" *ngIf="afterLastAnswer">

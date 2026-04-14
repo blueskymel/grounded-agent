@@ -202,9 +202,9 @@ $env:HALLUCINATION_DEMO_MODE = "unsafe"
 python -m uvicorn app.main:app --reload --app-dir .
 
 # Then open: http://127.0.0.1:8000/docs
-# Try asking: "What is the SLA for this service?"
+# Try asking: "What is our guaranteed failover policy for this service?"
 
-# Expected: Get a plausible but ungrounded answer about SLAs.
+# Expected: Get a plausible but ungrounded answer about policy details.
         </pre>
       </div>
 
@@ -218,7 +218,7 @@ $env:HALLUCINATION_DEMO_MODE = "safe"  # ← Only change: switch to safe
 python -m uvicorn app.main:app --reload --app-dir .
 
 # Then open: http://127.0.0.1:8000/docs
-# Ask the same question: "What is the SLA for this service?"
+# Ask the same question: "What is our guaranteed failover policy for this service?"
 
 # Expected: Refusal message - "I don't have enough information..."
         </pre>
