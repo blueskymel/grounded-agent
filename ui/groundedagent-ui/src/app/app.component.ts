@@ -161,7 +161,10 @@ type ObsTrace = {
         <div><b>Request ID:</b> {{selectedTrace.requestId || 'N/A'}}</div>
         <div><b>Retrieval backend:</b> {{selectedTrace.retrievalBackend}}</div>
         <div><b>Question:</b> {{selectedTrace.question}}</div>
-        <div><b>Decision Reason:</b> {{selectedTrace.decisionReason || 'N/A'}}</div>
+        <div>
+          <b>Decision Reason:</b>
+          <span [class]="decisionReasonClass(selectedTrace)">{{selectedTrace.decisionReason || 'N/A'}}</span>
+        </div>
       </div>
 
       <div class="trace-section" *ngIf="selectedTrace.decisionAudit">
@@ -494,6 +497,16 @@ type ObsTrace = {
   flex-direction: column;
   gap: 4px;
   margin-bottom: 10px;
+}
+
+.reason-refused {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.reason-accepted {
+  color: #166534;
+  font-weight: 700;
 }
 
 .trace-section {
@@ -859,6 +872,11 @@ export class AppComponent implements OnInit {
     }
 
     return map[reason] ?? reason.replaceAll('_', ' ')
+  }
+
+  decisionReasonClass(trace: ObsTrace): string {
+    if (trace.decisionAudit?.refusal_triggered) return 'reason-refused'
+    return 'reason-accepted'
   }
 
   private scrollToBottom(panel: 'before' | 'after'): void {
