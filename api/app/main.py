@@ -76,6 +76,7 @@ app.add_middleware(
         allow_origins=_ALLOWED_ORIGINS,
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["*"],
+    expose_headers=["x-request-id", "x-tenant-id"],
 )
 
 
@@ -200,6 +201,7 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
                 decision=decision_audit,
             )
             return ChatResponse(
+                request_id=request_id,
                 answer=PROMPT_INJECTION_REFUSAL,
                 citations=[],
                 tool_calls=[],
@@ -259,6 +261,7 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
             )
 
             return ChatResponse(
+                request_id=request_id,
                 answer=answer,
                 citations=[],
                 tool_calls=tool_calls_out,
@@ -279,12 +282,14 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
         # ----------------------------------
 
         retriever = get_retriever()
+        t_retrieval0 = time.perf_counter()
 
         with trace_step("retrieval.search"):
             try:
                 chunks = retriever.retrieve(req.message, top_k=5, tenant_id=tenant_id)
             except TypeError:
                 chunks = retriever.retrieve(req.message, top_k=5)
+        retrieval_wall_ms = int((time.perf_counter() - t_retrieval0) * 1000)
         raw_chunk_count = len(chunks)
         decision_audit["raw_chunk_count"] = raw_chunk_count
         chunks, blocked_chunk_count = filter_retrieved_chunks_for_prompt_injection(chunks)
@@ -304,6 +309,10 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
         embed_ms = getattr(retriever, "last_embed_ms", 0) or 0
         search_ms = getattr(retriever, "last_search_ms", 0) or 0
         retrieval_ms = embed_ms + search_ms
+        if retrieval_ms == 0 and retrieval_wall_ms > 0:
+            retrieval_ms = retrieval_wall_ms
+        if retrieval_ms == 0 and raw_chunk_count > 0:
+            retrieval_ms = 1
 
         # Build all citations for max_score calculation and filtering
         all_citations = [
@@ -340,6 +349,8 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
                 result = generate_grounded_answer(req.message, chunks, mode_override=mode_override)
 
             llm_ms = int((time.perf_counter() - t_llm0) * 1000)
+            if llm_ms == 0:
+                llm_ms = 1
 
             # Support both GroundedResult objects and dict-returning mock mode
             if hasattr(result, "answer"):
@@ -387,6 +398,8 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
             decision_audit["refusal_reason"] = "no_chunks_available"
 
         total_ms = int((time.perf_counter() - t_total0) * 1000)
+        if total_ms == 0:
+            total_ms = 1
 
         top_chunks = [
             {"doc_id": c.doc_id, "chunk_id": c.chunk_id, "score": getattr(c, "score", None)}
@@ -419,6 +432,7 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
         )
 
         return ChatResponse(
+            request_id=request_id,
             answer=answer,
             citations=citations,
             tool_calls=[],

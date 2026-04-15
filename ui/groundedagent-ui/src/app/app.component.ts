@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common'
 import { FormsModule } from '@angular/forms'
 import { HttpErrorResponse } from '@angular/common/http'
 import { ApiService, ChatResult } from './api.service'
-import { ChatResponse } from './api.types'
+import { ChatResponse, DecisionAudit } from './api.types'
 
 type DemoMessage = {
   role: 'user' | 'assistant'
@@ -16,11 +16,13 @@ type ObsTrace = {
   endpoint: 'before' | 'after'
   requestId?: string
   question: string
+  decisionReason?: string
   answer: string
   retrievalBackend: string
   timings?: ChatResponse['timings']
   citations: ChatResponse['citations']
   retrievedChunks: ChatResponse['retrieved_chunks']
+  decisionAudit?: DecisionAudit
 }
 
 @Component({
@@ -46,14 +48,8 @@ type ObsTrace = {
           <div *ngFor="let m of beforeMessages" class="msg-row" [class.user-row]="m.role === 'user'">
             <div class="bubble" [class.user-bubble]="m.role === 'user'" [class.assistant-bubble]="m.role === 'assistant'">
               <div class="bubble-text">{{m.text}}</div>
-              <div class="cite-list" *ngIf="m.citations?.length">
-                <div *ngFor="let c of m.citations" class="cite-item">
-                  <span class="cite-doc">Citation: {{c.doc_id}}</span>
-                  <span class="cite-score">Confidence: {{formatConfidence(c.score)}}</span>
-                </div>
-              </div>
               <button *ngIf="m.role === 'assistant' && m.trace" class="trace-link" (click)="openTrace(m.trace)">
-                Behind the scenes
+                Decision trace
               </button>
             </div>
           </div>
@@ -79,14 +75,8 @@ type ObsTrace = {
           <div *ngFor="let m of afterMessages" class="msg-row" [class.user-row]="m.role === 'user'">
             <div class="bubble" [class.user-bubble]="m.role === 'user'" [class.assistant-bubble]="m.role === 'assistant'">
               <div class="bubble-text">{{m.text}}</div>
-              <div class="cite-list" *ngIf="m.citations?.length">
-                <div *ngFor="let c of m.citations" class="cite-item">
-                  <span class="cite-doc">Citation: {{c.doc_id}}</span>
-                  <span class="cite-score">Confidence: {{formatConfidence(c.score)}}</span>
-                </div>
-              </div>
               <button *ngIf="m.role === 'assistant' && m.trace" class="trace-link" (click)="openTrace(m.trace)">
-                Behind the scenes
+                Decision trace
               </button>
             </div>
           </div>
@@ -162,7 +152,7 @@ type ObsTrace = {
   <div class="trace-modal-backdrop" *ngIf="traceModalOpen && selectedTrace" (click)="closeTrace()">
     <div class="trace-modal" (click)="$event.stopPropagation()">
       <div class="trace-head">
-        <h3>Observability: decision trace</h3>
+        <h3>Decision Trace</h3>
         <button class="trace-close" (click)="closeTrace()">Close</button>
       </div>
 
@@ -171,6 +161,21 @@ type ObsTrace = {
         <div><b>Request ID:</b> {{selectedTrace.requestId || 'N/A'}}</div>
         <div><b>Retrieval backend:</b> {{selectedTrace.retrievalBackend}}</div>
         <div><b>Question:</b> {{selectedTrace.question}}</div>
+        <div><b>Decision Reason:</b> {{selectedTrace.decisionReason || 'N/A'}}</div>
+      </div>
+
+      <div class="trace-section" *ngIf="selectedTrace.decisionAudit">
+        <h4>Decision Basis</h4>
+        <div class="trace-grid">
+          <div>mode: {{selectedTrace.decisionAudit.mode}}</div>
+          <div>refusal: {{selectedTrace.decisionAudit.refusal_triggered ? 'yes' : 'no'}}</div>
+          <div>max score: {{formatConfidence(selectedTrace.decisionAudit.max_citation_score)}}</div>
+          <div>safe threshold: {{formatConfidence(selectedTrace.decisionAudit.safe_min_confidence)}}</div>
+          <div>display threshold: {{formatConfidence(selectedTrace.decisionAudit.min_display_score)}}</div>
+          <div>safe chunks: {{selectedTrace.decisionAudit.safe_chunk_count}} / {{selectedTrace.decisionAudit.raw_chunk_count}}</div>
+          <div>blocked chunks: {{selectedTrace.decisionAudit.blocked_chunk_count}}</div>
+          <div>displayable citations: {{selectedTrace.decisionAudit.displayable_citation_count}}</div>
+        </div>
       </div>
 
       <div class="trace-section" *ngIf="selectedTrace.timings">
@@ -203,7 +208,7 @@ type ObsTrace = {
       </div>
 
       <div class="trace-note">
-        FDE production troubleshooting tip: use the Request ID to correlate this chat decision with backend chat_request logs in Container App logs.
+        Use Request ID to correlate this trace with backend chat_request and chat_decision_audit logs in Container App logs.
       </div>
     </div>
   </div>
@@ -826,16 +831,34 @@ export class AppComponent implements OnInit {
 
   private buildTrace(endpoint: 'before' | 'after', question: string, result: ChatResult): ObsTrace {
     const data = result.data
+    const reason = this.formatDecisionReason(data.decision_audit?.refusal_reason)
     return {
       endpoint,
-      requestId: result.requestId,
+      requestId: result.requestId || data.request_id,
       question,
+      decisionReason: reason,
       answer: data.answer,
       retrievalBackend: data.retrieval_backend,
       timings: data.timings,
       citations: data.citations ?? [],
       retrievedChunks: data.retrieved_chunks ?? [],
+      decisionAudit: data.decision_audit,
     }
+  }
+
+  private formatDecisionReason(reason?: string): string {
+    if (!reason) return 'Answer accepted: evidence met policy threshold'
+
+    const map: Record<string, string> = {
+      safe_mode_low_citation_confidence: 'Refused: citation confidence below safe threshold',
+      llm_refusal: 'Refused by model guardrail response',
+      prompt_injection_signals: 'Refused: direct prompt injection signal detected',
+      all_retrieved_chunks_blocked_by_prompt_injection: 'Refused: retrieved chunks were blocked by prompt-injection filter',
+      no_chunks_available: 'No indexed chunks available for retrieval',
+      tool_path_no_retrieval: 'Tool path used; retrieval not executed',
+    }
+
+    return map[reason] ?? reason.replaceAll('_', ' ')
   }
 
   private scrollToBottom(panel: 'before' | 'after'): void {

@@ -48,6 +48,7 @@ class DecisionAudit(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    request_id: str | None = None
     answer: str
     citations: list[Citation]
     tool_calls: list[ToolCall]
