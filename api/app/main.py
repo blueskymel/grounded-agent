@@ -64,6 +64,7 @@ init_app_insights(settings.applicationinsights_connection_string)
 
 app = FastAPI(title="GroundedAgent API", version="0.1.0")
 _SAFE_MIN_CITATION_CONFIDENCE = float(os.environ.get("SAFE_MIN_CITATION_CONFIDENCE", "0.95"))
+_MIN_CITATION_SCORE_TO_DISPLAY = 0.42  # Filter out weak citations from display for more convincing responses
 
 _ALLOWED_ORIGINS = [o.strip() for o in
         (os.environ.get("CORS_ORIGINS",
@@ -266,7 +267,8 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
         search_ms = getattr(retriever, "last_search_ms", 0) or 0
         retrieval_ms = embed_ms + search_ms
 
-        citations = [
+        # Build all citations for max_score calculation and filtering
+        all_citations = [
             Citation(
                 doc_id=c.doc_id,
                 title=c.title,
@@ -276,6 +278,13 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
                 snippet=(c.text or "")[:400],
             )
             for c in chunks
+        ]
+        
+        # Filter citations to only display strong ones (>= MIN_CITATION_SCORE_TO_DISPLAY)
+        # But use all citations for refusal decision (max_score gate)
+        citations = [
+            c for c in all_citations
+            if isinstance(c.score, (int, float)) and c.score >= _MIN_CITATION_SCORE_TO_DISPLAY
         ]
 
         # ----------------------------------
@@ -309,13 +318,15 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
             # Explicit safe endpoint hardening: only return an answer when
             # citation evidence exists and confidence is at/above threshold.
             if mode_override == "safe" and not refused:
-                citation_scores = [c.score for c in citations if isinstance(c.score, (int, float))]
-                max_score = max(citation_scores) if citation_scores else 0.0
-                if (not citations) or (max_score < _SAFE_MIN_CITATION_CONFIDENCE):
+                # Use all citations (not filtered) to calculate max score for refusal decision
+                all_citation_scores = [c.score for c in all_citations if isinstance(c.score, (int, float))]
+                max_score = max(all_citation_scores) if all_citation_scores else 0.0
+                if (not all_citation_scores) or (max_score < _SAFE_MIN_CITATION_CONFIDENCE):
                     answer = "I don't have enough information in the provided runbooks to answer that."
                     refused = True
                     citations = []
                     top_chunks = []
+                # Note: citations list is already filtered to >= _MIN_CITATION_SCORE_TO_DISPLAY above
         elif raw_chunk_count > 0 and not chunks:
 
             answer = PROMPT_INJECTION_REFUSAL

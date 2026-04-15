@@ -642,6 +642,18 @@ export class AppComponent implements OnInit {
     {
       label: 'Quant risk breach',
       prompt: 'What containment and exit criteria are required after a quant risk limit breach?'
+    },
+    {
+      label: '🔓 HALLUCINATION: Data breach (not documented)',
+      prompt: 'Our systems seem compromised. What is our data breach response and containment procedure?'
+    },
+    {
+      label: '🔓 HALLUCINATION: Disaster recovery (not documented)',
+      prompt: 'We need to execute our disaster recovery plan. What are the step-by-step recovery procedures?'
+    },
+    {
+      label: '🔓 HALLUCINATION: Compliance audit (not documented)',
+      prompt: 'We have an unannounced compliance audit scheduled. What is our audit response and documentation checklist?'
     }
   ]
 
