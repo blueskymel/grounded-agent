@@ -865,6 +865,7 @@ export class AppComponent implements OnInit {
     const map: Record<string, string> = {
       safe_mode_low_citation_confidence: 'Refused: citation confidence below safe threshold',
       safe_mode_intent_evidence_mismatch: 'Refused: prompt intent not supported by retrieved evidence',
+      safe_mode_out_of_domain_query: 'Refused: question is outside indexed runbook scope',
       llm_refusal: 'Refused by model guardrail response',
       prompt_injection_signals: 'Refused: direct prompt injection signal detected',
       all_retrieved_chunks_blocked_by_prompt_injection: 'Refused: retrieved chunks were blocked by prompt-injection filter',

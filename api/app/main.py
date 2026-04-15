@@ -71,6 +71,28 @@ _HALLUCINATION_GUARD_TERMS = re.compile(
     r"\b(breach|compromis(?:e|ed)|disaster\s*recovery|compliance|audit|legal|policy|governance|contractual)\b",
     re.IGNORECASE,
 )
+_DOMAIN_TERMS = re.compile(
+    r"\b(incident|runbook|p1|p2|escalat(?:e|ion)|rollback|handoff|on-?call|outage|payment|gateway|promo|pos|quant|risk|reconciliation|market|trading|latency|availability|containment|post-incident)\b",
+    re.IGNORECASE,
+)
+_INTENT_TOKENS = {
+    "breach",
+    "compromise",
+    "compromised",
+    "disaster",
+    "recovery",
+    "compliance",
+    "audit",
+    "legal",
+    "policy",
+    "governance",
+    "contractual",
+}
+
+
+def _extract_intent_tokens(text: str) -> set[str]:
+    tokens = set(re.findall(r"[a-z0-9]+", (text or "").lower()))
+    return tokens.intersection(_INTENT_TOKENS)
 
 _ALLOWED_ORIGINS = [o.strip() for o in
         (os.environ.get("CORS_ORIGINS",
@@ -347,7 +369,10 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
         # require those terms to appear in retrieved evidence; otherwise refuse.
         question_is_guarded = bool(_HALLUCINATION_GUARD_TERMS.search(req.message or ""))
         evidence_text = "\n".join((c.text or "") for c in chunks)
-        evidence_has_guarded_terms = bool(_HALLUCINATION_GUARD_TERMS.search(evidence_text))
+        question_intent_tokens = _extract_intent_tokens(req.message or "")
+        evidence_tokens = _extract_intent_tokens(evidence_text)
+        evidence_has_intent_match = bool(question_intent_tokens.intersection(evidence_tokens))
+        question_is_domain_related = bool(_DOMAIN_TERMS.search(req.message or ""))
 
         # ----------------------------------
         # Grounded answer
@@ -384,7 +409,15 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
             # Explicit safe endpoint hardening: only return an answer when
             # citation evidence exists and confidence is at/above threshold.
             if mode_override == "safe" and not refused:
-                if question_is_guarded and not evidence_has_guarded_terms:
+                if not question_is_domain_related:
+                    answer = "I don't have enough information in the provided runbooks to answer that."
+                    refused = True
+                    decision_audit["refusal_triggered"] = True
+                    decision_audit["refusal_reason"] = "safe_mode_out_of_domain_query"
+                    citations = []
+                    top_chunks = []
+
+                if (not refused) and question_is_guarded and (not evidence_has_intent_match):
                     answer = "I don't have enough information in the provided runbooks to answer that."
                     refused = True
                     decision_audit["refusal_triggered"] = True
