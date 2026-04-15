@@ -2,6 +2,10 @@ name: API Deploy
 
 on:
   push:
+    paths:
+      - 'api/**'
+      - 'docker/api.Dockerfile'
+      - '.github/workflows/api-deploy.yml'
   workflow_dispatch:
 
 permissions:
@@ -19,6 +23,11 @@ jobs:
       AZURE_ACR_LOGIN_SERVER: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
       AZURE_CONTAINERAPP_RESOURCE_GROUP: ${{ secrets.AZURE_CONTAINERAPP_RESOURCE_GROUP }}
       AZURE_CONTAINERAPP_NAME: ${{ secrets.AZURE_CONTAINERAPP_NAME }}
+      AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+      AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+      AZURE_OPENAI_API_VERSION: ${{ secrets.AZURE_OPENAI_API_VERSION }}
+      AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT }}
+      AZURE_OPENAI_CHAT_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_CHAT_DEPLOYMENT }}
 
     steps:
       - name: Checkout
@@ -66,20 +75,47 @@ jobs:
           IMAGE_TAG="${GITHUB_SHA}"
           IMAGE="${AZURE_ACR_LOGIN_SERVER}/grounded-agent-api:${IMAGE_TAG}"
 
+          USE_AOAI=false
+          BUILD_ARGS=()
+          if [ -n "${AZURE_OPENAI_ENDPOINT}" ] && [ -n "${AZURE_OPENAI_API_KEY}" ] && [ -n "${AZURE_OPENAI_API_VERSION}" ] && [ -n "${AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT}" ]; then
+            USE_AOAI=true
+            BUILD_ARGS+=(--build-arg "AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}")
+            BUILD_ARGS+=(--build-arg "AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}")
+            BUILD_ARGS+=(--build-arg "AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION}")
+            BUILD_ARGS+=(--build-arg "AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT=${AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT}")
+          fi
+
           az acr login --name "${AZURE_ACR_NAME}"
-          docker build -f docker/api.Dockerfile -t "${IMAGE}" .
+          docker build -f docker/api.Dockerfile -t "${IMAGE}" "${BUILD_ARGS[@]}" .
           docker push "${IMAGE}"
 
           echo "IMAGE=${IMAGE}" >> "$GITHUB_ENV"
+          echo "USE_AOAI=${USE_AOAI}" >> "$GITHUB_ENV"
 
       - name: Update Azure Container App
         if: ${{ steps.precheck.outputs.ready == 'true' }}
         run: |
           set -euxo pipefail
-          az containerapp update \
-            --name "${AZURE_CONTAINERAPP_NAME}" \
-            --resource-group "${AZURE_CONTAINERAPP_RESOURCE_GROUP}" \
-            --image "${IMAGE}"
+          if [ "${USE_AOAI}" = "true" ]; then
+            az containerapp update \
+              --name "${AZURE_CONTAINERAPP_NAME}" \
+              --resource-group "${AZURE_CONTAINERAPP_RESOURCE_GROUP}" \
+              --image "${IMAGE}" \
+              --set-env-vars \
+                LLM_PROVIDER=aoai \
+                EMBEDDINGS_PROVIDER=aoai \
+                AZURE_OPENAI_ENDPOINT="${AZURE_OPENAI_ENDPOINT}" \
+                AZURE_OPENAI_API_KEY="${AZURE_OPENAI_API_KEY}" \
+                AZURE_OPENAI_API_VERSION="${AZURE_OPENAI_API_VERSION}" \
+                AZURE_OPENAI_CHAT_DEPLOYMENT="${AZURE_OPENAI_CHAT_DEPLOYMENT}" \
+                AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT="${AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT}"
+          else
+            az containerapp update \
+              --name "${AZURE_CONTAINERAPP_NAME}" \
+              --resource-group "${AZURE_CONTAINERAPP_RESOURCE_GROUP}" \
+              --image "${IMAGE}" \
+              --set-env-vars LLM_PROVIDER=mock EMBEDDINGS_PROVIDER=mock
+          fi
 
       - name: Smoke test API health endpoint
         if: ${{ steps.precheck.outputs.ready == 'true' }}
