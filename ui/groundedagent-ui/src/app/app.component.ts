@@ -629,6 +629,14 @@ export class AppComponent implements OnInit {
 
   citationExamples = [
     {
+      label: '🔓 HALLUCINATION: Disaster recovery (not documented)',
+      prompt: 'We need to execute our disaster recovery plan. What are the step-by-step recovery procedures?'
+    },
+    {
+      label: '🔓 HALLUCINATION: Compliance audit (not documented)',
+      prompt: 'We have an unannounced compliance audit scheduled. What is our audit response and documentation checklist?'
+    },
+    {
       label: 'P1 process scope',
       prompt: 'Based only on the runbooks, summarize the P1 incident response steps and include concrete escalation checkpoints.'
     },
@@ -663,14 +671,6 @@ export class AppComponent implements OnInit {
     {
       label: 'Quant risk breach',
       prompt: 'What containment and exit criteria are required after a quant risk limit breach?'
-    },
-    {
-      label: '🔓 HALLUCINATION: Disaster recovery (not documented)',
-      prompt: 'We need to execute our disaster recovery plan. What are the step-by-step recovery procedures?'
-    },
-    {
-      label: '🔓 HALLUCINATION: Compliance audit (not documented)',
-      prompt: 'We have an unannounced compliance audit scheduled. What is our audit response and documentation checklist?'
     }
   ]
 
