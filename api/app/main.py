@@ -21,6 +21,7 @@ from pathlib import Path
 import time
 import uuid
 import os
+import re
 
 from app.observability.logger import log_event
 from app.observability.errors import format_exception
@@ -65,6 +66,11 @@ init_app_insights(settings.applicationinsights_connection_string)
 app = FastAPI(title="GroundedAgent API", version="0.1.0")
 _SAFE_MIN_CITATION_CONFIDENCE = float(os.environ.get("SAFE_MIN_CITATION_CONFIDENCE", "0.95"))
 _MIN_CITATION_SCORE_TO_DISPLAY = 0.25  # Filter only junk matches (very low scores); normal good matches in 0.32-0.40 range
+
+_HALLUCINATION_GUARD_TERMS = re.compile(
+    r"\b(breach|compromis(?:e|ed)|disaster\s*recovery|compliance|audit|legal|policy|governance|contractual)\b",
+    re.IGNORECASE,
+)
 
 _ALLOWED_ORIGINS = [o.strip() for o in
         (os.environ.get("CORS_ORIGINS",
@@ -337,6 +343,12 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
         decision_audit["max_citation_score"] = max(all_citation_scores) if all_citation_scores else None
         decision_audit["displayable_citation_count"] = len(citations)
 
+        # Safe-mode hallucination guard: if question asks about high-risk domains,
+        # require those terms to appear in retrieved evidence; otherwise refuse.
+        question_is_guarded = bool(_HALLUCINATION_GUARD_TERMS.search(req.message or ""))
+        evidence_text = "\n".join((c.text or "") for c in chunks)
+        evidence_has_guarded_terms = bool(_HALLUCINATION_GUARD_TERMS.search(evidence_text))
+
         # ----------------------------------
         # Grounded answer
         # ----------------------------------
@@ -372,9 +384,17 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
             # Explicit safe endpoint hardening: only return an answer when
             # citation evidence exists and confidence is at/above threshold.
             if mode_override == "safe" and not refused:
+                if question_is_guarded and not evidence_has_guarded_terms:
+                    answer = "I don't have enough information in the provided runbooks to answer that."
+                    refused = True
+                    decision_audit["refusal_triggered"] = True
+                    decision_audit["refusal_reason"] = "safe_mode_intent_evidence_mismatch"
+                    citations = []
+                    top_chunks = []
+
                 # Use all citations (not filtered) to calculate max score for refusal decision
                 max_score = max(all_citation_scores) if all_citation_scores else 0.0
-                if (not all_citation_scores) or (max_score < _SAFE_MIN_CITATION_CONFIDENCE):
+                if (not refused) and ((not all_citation_scores) or (max_score < _SAFE_MIN_CITATION_CONFIDENCE)):
                     answer = "I don't have enough information in the provided runbooks to answer that."
                     refused = True
                     decision_audit["refusal_triggered"] = True
