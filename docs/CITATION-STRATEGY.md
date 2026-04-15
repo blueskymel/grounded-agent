@@ -19,23 +19,25 @@ This produces a normalized 0–1 range, but typical values range **0.30–0.65**
 
 ## Dual-Gate Refusal Strategy
 
-### Gate 1: Per-Citation Display Filter (0.42)
-**Purpose**: Hide weak individual citations from the UI, even if the overall max score passes.
+### Gate 1: Per-Citation Display Filter (0.25)
+**Purpose**: Hide junk/near-zero citations from the UI, but show all reasonable matches.
 
 ```python
-MIN_CITATION_SCORE_TO_DISPLAY = 0.42
+MIN_CITATION_SCORE_TO_DISPLAY = 0.25
 ```
 
 **Behavior**:
 - Retrieve all matching chunks and their scores
-- **Filter for display**: Only show citations with score ≥ 0.42
-- Result: Cleaner, more convincing answers without weak citations cluttering the response
+- **Filter for display**: Only show citations with score ≥ 0.25
+- Result: Removes extremely low-quality matches while preserving normal retrieval results
 
-**Example**:
+**Example** (typical FAISS index behavior):
 ```
-Retrieved:   [0.45, 0.38, 0.36, 0.42, 0.34]
-Displayed:   [0.45, 0.42]  ← Only strong citations shown
+Retrieved:   [0.45, 0.38, 0.36, 0.05, 0.02]
+Displayed:   [0.45, 0.38, 0.36]  ← Only removes bottom 0.05, 0.02 junk
 ```
+
+**Note**: For this index, typical good matches score 0.32–0.40. This filter is very permissive to avoid hiding real results.
 
 ### Gate 2: Refusal Threshold (0.55)
 **Purpose**: Refuse answers entirely when max score (across ALL citations, not filtered) is below threshold.
@@ -84,12 +86,15 @@ These prompts will produce plausible-sounding fabricated answers in the "before"
 
 | Value  | Behavior                                   | Use Case              |
 |--------|--------------------------------------------|-----------------------|
-| 0.35   | Show most/all retrieved citations          | Maximize information  |
-| 0.40   | Filter weak matches                        | Balanced (current)    |
-| 0.50   | Only strongest matches                     | High-conviction only  |
+| 0.15   | Show almost all retrieved citations        | Maximize information  |
+| 0.25   | Filter only junk/extremely low matches     | Balanced (current)    |
+| 0.35   | Filter below-average matches               | Conservative          |
+| 0.45   | Only show above-median matches             | Very high quality     |
 
-Lower value = more citations shown (but potentially weaker)
-Higher value = fewer, stronger citations (but less information)
+**Note**: For this index, typical good matches score 0.32–0.40. Lower thresholds (0.15–0.25) are recommended.
+
+Lower value = more citations shown (including marginal matches)
+Higher value = fewer, stronger citations (but risks hiding relevant matches)
 
 ### Adjusting `SAFE_MIN_CITATION_CONFIDENCE` (Refusal Gate)
 

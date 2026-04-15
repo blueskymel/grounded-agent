@@ -64,7 +64,7 @@ init_app_insights(settings.applicationinsights_connection_string)
 
 app = FastAPI(title="GroundedAgent API", version="0.1.0")
 _SAFE_MIN_CITATION_CONFIDENCE = float(os.environ.get("SAFE_MIN_CITATION_CONFIDENCE", "0.95"))
-_MIN_CITATION_SCORE_TO_DISPLAY = 0.42  # Filter out weak citations from display for more convincing responses
+_MIN_CITATION_SCORE_TO_DISPLAY = 0.25  # Filter only junk matches (very low scores); normal good matches in 0.32-0.40 range
 
 _ALLOWED_ORIGINS = [o.strip() for o in
         (os.environ.get("CORS_ORIGINS",
