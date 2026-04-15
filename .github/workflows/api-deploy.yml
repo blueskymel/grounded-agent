@@ -28,6 +28,8 @@ jobs:
       AZURE_OPENAI_API_VERSION: ${{ secrets.AZURE_OPENAI_API_VERSION }}
       AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT }}
       AZURE_OPENAI_CHAT_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_CHAT_DEPLOYMENT }}
+      SAFE_MIN_CITATION_CONFIDENCE: ${{ vars.SAFE_MIN_CITATION_CONFIDENCE }}
+      MIN_CITATION_SCORE_TO_DISPLAY: ${{ vars.MIN_CITATION_SCORE_TO_DISPLAY }}
 
     steps:
       - name: Checkout
@@ -96,6 +98,8 @@ jobs:
         if: ${{ steps.precheck.outputs.ready == 'true' }}
         run: |
           set -euxo pipefail
+          SAFE_CONF="${SAFE_MIN_CITATION_CONFIDENCE:-0.35}"
+          MIN_DISPLAY="${MIN_CITATION_SCORE_TO_DISPLAY:-0.25}"
           if [ "${USE_AOAI}" = "true" ]; then
             az containerapp update \
               --name "${AZURE_CONTAINERAPP_NAME}" \
@@ -108,13 +112,19 @@ jobs:
                 AZURE_OPENAI_API_KEY="${AZURE_OPENAI_API_KEY}" \
                 AZURE_OPENAI_API_VERSION="${AZURE_OPENAI_API_VERSION}" \
                 AZURE_OPENAI_CHAT_DEPLOYMENT="${AZURE_OPENAI_CHAT_DEPLOYMENT}" \
-                AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT="${AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT}"
+                AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT="${AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT}" \
+                SAFE_MIN_CITATION_CONFIDENCE="${SAFE_CONF}" \
+                MIN_CITATION_SCORE_TO_DISPLAY="${MIN_DISPLAY}"
           else
             az containerapp update \
               --name "${AZURE_CONTAINERAPP_NAME}" \
               --resource-group "${AZURE_CONTAINERAPP_RESOURCE_GROUP}" \
               --image "${IMAGE}" \
-              --set-env-vars LLM_PROVIDER=mock EMBEDDINGS_PROVIDER=mock
+              --set-env-vars \
+                LLM_PROVIDER=mock \
+                EMBEDDINGS_PROVIDER=mock \
+                SAFE_MIN_CITATION_CONFIDENCE="${SAFE_CONF}" \
+                MIN_CITATION_SCORE_TO_DISPLAY="${MIN_DISPLAY}"
           fi
 
       - name: Smoke test API health endpoint
