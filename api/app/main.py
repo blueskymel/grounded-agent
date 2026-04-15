@@ -157,6 +157,21 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
     citations: list[Citation] = []
     tool_calls_out: list[ToolCall] = []
     agent_tool_calls_raw: list[dict] = []
+    mode_name = mode_override or "default"
+    decision_audit = {
+        "mode": mode_name,
+        "blocked_by_prompt_injection": False,
+        "blocked_chunk_count": 0,
+        "raw_chunk_count": 0,
+        "safe_chunk_count": 0,
+        "displayable_citation_count": 0,
+        "max_citation_score": None,
+        "min_display_score": _MIN_CITATION_SCORE_TO_DISPLAY,
+        "safe_min_confidence": _SAFE_MIN_CITATION_CONFIDENCE,
+        "refusal_triggered": False,
+        "refusal_reason": None,
+        "evidence": [],
+    }
 
     try:
 
@@ -166,6 +181,9 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
 
         pi_check = check_user_message_for_prompt_injection(req.message)
         if pi_check.blocked:
+            decision_audit["blocked_by_prompt_injection"] = True
+            decision_audit["refusal_triggered"] = True
+            decision_audit["refusal_reason"] = "prompt_injection_signals"
             total_ms = int((time.perf_counter() - t_total0) * 1000)
             log_event(
                 "chat_blocked_prompt_injection",
@@ -173,6 +191,13 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
                 retrieval_backend=backend,
                 total_ms=total_ms,
                 signals=pi_check.matched_signals,
+            )
+            log_event(
+                "chat_decision_audit",
+                request_id=request_id,
+                retrieval_backend=backend,
+                tenant_id=tenant_id,
+                decision=decision_audit,
             )
             return ChatResponse(
                 answer=PROMPT_INJECTION_REFUSAL,
@@ -187,6 +212,7 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
                     "total_ms": total_ms,
                 },
                 retrieved_chunks=[],
+                decision_audit=decision_audit,
             )
 
         # ----------------------------------
@@ -223,6 +249,14 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
                 citations_count=0,
                 **summarize_tool_calls(agent_tool_calls_raw),
             )
+            decision_audit["refusal_reason"] = "tool_path_no_retrieval"
+            log_event(
+                "chat_decision_audit",
+                request_id=request_id,
+                retrieval_backend=backend,
+                tenant_id=tenant_id,
+                decision=decision_audit,
+            )
 
             return ChatResponse(
                 answer=answer,
@@ -237,6 +271,7 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
                     "total_ms": total_ms,
                 },
                 retrieved_chunks=[],
+                decision_audit=decision_audit,
             )
 
         # ----------------------------------
@@ -251,7 +286,10 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
             except TypeError:
                 chunks = retriever.retrieve(req.message, top_k=5)
         raw_chunk_count = len(chunks)
+        decision_audit["raw_chunk_count"] = raw_chunk_count
         chunks, blocked_chunk_count = filter_retrieved_chunks_for_prompt_injection(chunks)
+        decision_audit["blocked_chunk_count"] = blocked_chunk_count
+        decision_audit["safe_chunk_count"] = len(chunks)
 
         if blocked_chunk_count:
             log_event(
@@ -286,6 +324,9 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
             c for c in all_citations
             if isinstance(c.score, (int, float)) and c.score >= _MIN_CITATION_SCORE_TO_DISPLAY
         ]
+        all_citation_scores = [c.score for c in all_citations if isinstance(c.score, (int, float))]
+        decision_audit["max_citation_score"] = max(all_citation_scores) if all_citation_scores else None
+        decision_audit["displayable_citation_count"] = len(citations)
 
         # ----------------------------------
         # Grounded answer
@@ -312,6 +353,8 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
                 refused = False
 
             if refused:
+                decision_audit["refusal_triggered"] = True
+                decision_audit["refusal_reason"] = "llm_refusal"
                 citations = []
                 top_chunks = []
 
@@ -319,11 +362,12 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
             # citation evidence exists and confidence is at/above threshold.
             if mode_override == "safe" and not refused:
                 # Use all citations (not filtered) to calculate max score for refusal decision
-                all_citation_scores = [c.score for c in all_citations if isinstance(c.score, (int, float))]
                 max_score = max(all_citation_scores) if all_citation_scores else 0.0
                 if (not all_citation_scores) or (max_score < _SAFE_MIN_CITATION_CONFIDENCE):
                     answer = "I don't have enough information in the provided runbooks to answer that."
                     refused = True
+                    decision_audit["refusal_triggered"] = True
+                    decision_audit["refusal_reason"] = "safe_mode_low_citation_confidence"
                     citations = []
                     top_chunks = []
                 # Note: citations list is already filtered to >= _MIN_CITATION_SCORE_TO_DISPLAY above
@@ -331,6 +375,8 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
 
             answer = PROMPT_INJECTION_REFUSAL
             refused = True
+            decision_audit["refusal_triggered"] = True
+            decision_audit["refusal_reason"] = "all_retrieved_chunks_blocked_by_prompt_injection"
             citations = []
             top_chunks = []
 
@@ -338,6 +384,7 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
 
             answer = "I don't have any indexed runbooks yet. Upload/ingest documents first."
             refused = False
+            decision_audit["refusal_reason"] = "no_chunks_available"
 
         total_ms = int((time.perf_counter() - t_total0) * 1000)
 
@@ -345,6 +392,7 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
             {"doc_id": c.doc_id, "chunk_id": c.chunk_id, "score": getattr(c, "score", None)}
             for c in chunks[:5]
         ]
+        decision_audit["evidence"] = top_chunks
 
         log_event(
             "chat_request",
@@ -362,6 +410,13 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
             citations_count=len(citations),
             **summarize_tool_calls([]),
         )
+        log_event(
+            "chat_decision_audit",
+            request_id=request_id,
+            retrieval_backend=backend,
+            tenant_id=tenant_id,
+            decision=decision_audit,
+        )
 
         return ChatResponse(
             answer=answer,
@@ -376,6 +431,7 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
                 "total_ms": total_ms,
             },
             retrieved_chunks=top_chunks,
+            decision_audit=decision_audit,
         )
 
     except Exception as e:
