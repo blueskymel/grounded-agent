@@ -1,0 +1,39 @@
+Title: Quant Trading Order Reconciliation Runbook
+
+Purpose:
+Ensure filled orders in execution venue match internal order ledger after market sessions.
+
+When to Run:
+- End of day reconciliation
+- After exchange connectivity incident
+- After OMS release affecting fill handling
+
+Inputs:
+- Venue execution report export
+- Internal OMS fills table
+- Allocation records
+
+Steps:
+1. Load venue and OMS fills for the same trading date.
+2. Normalize order IDs and execution IDs.
+3. Match by execution ID, then fallback to (symbol, side, qty, timestamp window).
+4. Flag unmatched fills and quantity deltas.
+5. Recalculate average fill price for each parent order.
+
+Escalation Thresholds:
+- Any unmatched notional above 50,000 USD.
+- Aggregate quantity mismatch above 0.25% of daily volume.
+- More than 20 unresolved breaks after first pass.
+
+Remediation:
+- Replay execution drop copy feed for missing interval.
+- Reprocess affected order batch in OMS reconciliation job.
+- Create manual correction ticket for finance if breaks remain.
+
+Controls:
+- Four-eyes review for manual corrections.
+- Attach reconciliation report to incident ticket.
+
+Completion Criteria:
+- All material breaks resolved or accepted by trading operations lead.
+- Final reconciliation report signed off by quant ops.

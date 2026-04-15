@@ -31,9 +31,15 @@ api/data/raw/*
 !api/data/raw/store_pos_recovery_checklist.txt
 !api/data/raw/scanned_store_incident.pdf
 !api/data/raw/scanned_store_incident.png
+!api/data/raw/retail_payment_gateway_degradation_runbook.md
+!api/data/raw/retail_promo_price_mismatch_runbook.txt
+!api/data/raw/quant_market_data_gap_runbook.md
+!api/data/raw/quant_order_reconciliation_runbook.txt
+!api/data/raw/quant_risk_limit_breach_runbook.txt
 *.index
 *.jsonl
 *.log
+api/eval/report.json
 
 # Env
 .env

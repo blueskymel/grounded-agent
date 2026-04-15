@@ -1,6 +1,7 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core'
 import { CommonModule } from '@angular/common'
 import { FormsModule } from '@angular/forms'
+import { HttpErrorResponse } from '@angular/common/http'
 import { ApiService, ChatResult } from './api.service'
 import { ChatResponse } from './api.types'
 
@@ -621,6 +622,26 @@ export class AppComponent implements OnInit {
     {
       label: 'Handoff requirements',
       prompt: 'What on-call handoff requirements are documented for critical incidents?'
+    },
+    {
+      label: 'Retail payment degradation',
+      prompt: 'According to the runbooks, what immediate actions and escalation thresholds apply when retail payment gateway latency spikes?'
+    },
+    {
+      label: 'Retail promo mismatch',
+      prompt: 'What is the diagnosis and mitigation workflow for a POS promo price mismatch incident?'
+    },
+    {
+      label: 'Quant data gap controls',
+      prompt: 'In the quant market data gap runbook, what immediate risk controls should be applied before trading resumes?'
+    },
+    {
+      label: 'Quant reconciliation',
+      prompt: 'What thresholds trigger escalation in the quant order reconciliation runbook?'
+    },
+    {
+      label: 'Quant risk breach',
+      prompt: 'What containment and exit criteria are required after a quant risk limit breach?'
     }
   ]
 
@@ -660,29 +681,31 @@ export class AppComponent implements OnInit {
 
     this.beforeSending = true
     this.beforeDraft = ''
-    this.beforeMessages = [...this.beforeMessages, { role: 'user', text: msg }]
+    this.beforeMessages = [
+      ...this.beforeMessages,
+      { role: 'user', text: msg },
+      { role: 'assistant', text: 'Contacting BEFORE endpoint...' }
+    ]
 
     this.api.chatBefore(msg).subscribe({
       next: (res: ChatResult) => {
         const data = res.data
-        this.beforeMessages = [
-          ...this.beforeMessages,
-          {
-            role: 'assistant',
-            text: data.answer,
-            citations: (data.citations ?? []).map(c => ({ doc_id: c.doc_id, score: c.score })),
-            trace: this.buildTrace('before', msg, res)
-          }
-        ]
+        const updated: DemoMessage = {
+          role: 'assistant',
+          text: data.answer,
+          citations: (data.citations ?? []).map(c => ({ doc_id: c.doc_id, score: c.score })),
+          trace: this.buildTrace('before', msg, res)
+        }
+        this.beforeMessages = this.replaceLastMessage(this.beforeMessages, updated)
         this.beforeLastAnswer = data.answer
         this.beforeSending = false
         this.cdr.detectChanges()
       },
-      error: () => {
-        this.beforeMessages = [...this.beforeMessages, {
+      error: (err) => {
+        this.beforeMessages = this.replaceLastMessage(this.beforeMessages, {
           role: 'assistant',
-          text: 'Request failed for BEFORE endpoint.'
-        }]
+          text: this.formatRequestError('BEFORE', err)
+        })
         this.beforeSending = false
         this.cdr.detectChanges()
       }
@@ -695,29 +718,31 @@ export class AppComponent implements OnInit {
 
     this.afterSending = true
     this.afterDraft = ''
-    this.afterMessages = [...this.afterMessages, { role: 'user', text: msg }]
+    this.afterMessages = [
+      ...this.afterMessages,
+      { role: 'user', text: msg },
+      { role: 'assistant', text: 'Contacting AFTER endpoint...' }
+    ]
 
     this.api.chatAfter(msg).subscribe({
       next: (res: ChatResult) => {
         const data = res.data
-        this.afterMessages = [
-          ...this.afterMessages,
-          {
-            role: 'assistant',
-            text: data.answer,
-            citations: (data.citations ?? []).map(c => ({ doc_id: c.doc_id, score: c.score })),
-            trace: this.buildTrace('after', msg, res)
-          }
-        ]
+        const updated: DemoMessage = {
+          role: 'assistant',
+          text: data.answer,
+          citations: (data.citations ?? []).map(c => ({ doc_id: c.doc_id, score: c.score })),
+          trace: this.buildTrace('after', msg, res)
+        }
+        this.afterMessages = this.replaceLastMessage(this.afterMessages, updated)
         this.afterLastAnswer = data.answer
         this.afterSending = false
         this.cdr.detectChanges()
       },
-      error: () => {
-        this.afterMessages = [...this.afterMessages, {
+      error: (err) => {
+        this.afterMessages = this.replaceLastMessage(this.afterMessages, {
           role: 'assistant',
-          text: 'Request failed for AFTER endpoint.'
-        }]
+          text: this.formatRequestError('AFTER', err)
+        })
         this.afterSending = false
         this.cdr.detectChanges()
       }
@@ -750,6 +775,30 @@ export class AppComponent implements OnInit {
   closeTrace(): void {
     this.traceModalOpen = false
     this.selectedTrace = null
+  }
+
+  private replaceLastMessage(messages: DemoMessage[], replacement: DemoMessage): DemoMessage[] {
+    if (!messages.length) return [replacement]
+    const updated = [...messages]
+    updated[updated.length - 1] = replacement
+    return updated
+  }
+
+  private formatRequestError(endpoint: 'BEFORE' | 'AFTER', err: unknown): string {
+    if ((err as { name?: string } | null)?.name === 'TimeoutError') {
+      return `${endpoint} request timed out. API may be cold-starting; retry in a few seconds.`
+    }
+
+    const httpErr = err as HttpErrorResponse
+    if (httpErr?.status === 0) {
+      return `${endpoint} request could not reach the API. It may be down or waking up.`
+    }
+
+    if (httpErr?.status >= 500) {
+      return `${endpoint} endpoint returned server error (${httpErr.status}). Please retry.`
+    }
+
+    return `Request failed for ${endpoint} endpoint.`
   }
 
   private buildTrace(endpoint: 'before' | 'after', question: string, result: ChatResult): ObsTrace {

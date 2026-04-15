@@ -1,0 +1,33 @@
+Title: Quant Risk Limit Breach Runbook
+
+Objective:
+Respond quickly when portfolio, strategy, or instrument risk limits are breached.
+
+Breach Examples:
+- Strategy gross exposure exceeds configured cap.
+- Intraday drawdown exceeds stop threshold.
+- Order notional exceeds symbol risk guardrail.
+
+Immediate Actions:
+1. Freeze new order placement for impacted strategy.
+2. Notify risk officer and incident commander.
+3. Capture breach snapshot: time, strategy, symbol, exposure, pnl.
+
+Validation:
+- Confirm breach is not due to delayed positions feed.
+- Recompute limits using latest positions and marks.
+- Verify risk config version and recent changes.
+
+Containment:
+- Force strategy kill switch if breach persists.
+- Reduce open risk by flattening highest-risk legs first.
+- Block manual override unless approved by risk officer.
+
+Escalation:
+- SEV1 if breach impacts firm-level limits.
+- SEV2 for strategy-level breaches lasting > 10 minutes.
+
+Exit Criteria:
+- Exposure returns within approved limits.
+- Risk and trading operations approve strategy resume.
+- Incident timeline and actions logged in ticket.

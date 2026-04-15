@@ -1,0 +1,33 @@
+Title: Retail Promo Price Mismatch Runbook
+
+Trigger Conditions:
+- Promotion discount not applied at POS in 3 or more stores
+- Price mismatch complaints exceed 10 customers in 15 minutes
+
+Initial Response:
+1. Declare SEV3 incident and assign owner.
+2. Capture sample SKUs, expected promo price, and actual charged price.
+3. Freeze additional promo config publishes until root cause is known.
+
+Diagnosis Checklist:
+- Verify active promo window (start/end timezone).
+- Verify store catalog replication status.
+- Validate POS cache version against central pricing service.
+- Check feature flag state for promo engine.
+
+Mitigation Options:
+- Force cache refresh on impacted stores.
+- Roll back most recent pricing ruleset if mismatch started after deploy.
+- Enable manual discount override guidance for cashiers.
+
+Communication:
+- Incident updates every 30 minutes in #incident-bridge.
+- Notify customer support with affected SKU list and remediation script.
+
+Recovery Criteria:
+- Test basket in 3 impacted stores shows correct promo price.
+- No new pricing mismatch alerts for 30 minutes.
+
+Post-Incident:
+- Document root cause category: data sync, flag config, or rules logic.
+- Add automated pre-publish validation for promo rules.
