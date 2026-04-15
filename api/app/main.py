@@ -66,6 +66,7 @@ init_app_insights(settings.applicationinsights_connection_string)
 app = FastAPI(title="GroundedAgent API", version="0.1.0")
 _SAFE_MIN_CITATION_CONFIDENCE = float(os.environ.get("SAFE_MIN_CITATION_CONFIDENCE", "0.95"))
 _MIN_CITATION_SCORE_TO_DISPLAY = 0.25  # Filter only junk matches (very low scores); normal good matches in 0.32-0.40 range
+_INTENT_GUARD_BYPASS_CONFIDENCE = float(os.environ.get("INTENT_GUARD_BYPASS_CONFIDENCE", "0.90"))
 
 _HALLUCINATION_GUARD_TERMS = re.compile(
     r"\b(breach|compromis(?:e|ed)|disaster\s*recovery|compliance|audit|legal|policy|governance|contractual)\b",
@@ -409,7 +410,9 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
             # Explicit safe endpoint hardening: only return an answer when
             # citation evidence exists and confidence is at/above threshold.
             if mode_override == "safe" and not refused:
-                if not question_is_domain_related:
+                max_score = max(all_citation_scores) if all_citation_scores else 0.0
+
+                if (not question_is_domain_related) and (max_score < _INTENT_GUARD_BYPASS_CONFIDENCE):
                     answer = "I don't have enough information in the provided runbooks to answer that."
                     refused = True
                     decision_audit["refusal_triggered"] = True
@@ -417,7 +420,7 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
                     citations = []
                     top_chunks = []
 
-                if (not refused) and question_is_guarded and (not evidence_has_intent_match):
+                if (not refused) and question_is_guarded and (not evidence_has_intent_match) and (max(all_citation_scores) if all_citation_scores else 0.0) < _INTENT_GUARD_BYPASS_CONFIDENCE:
                     answer = "I don't have enough information in the provided runbooks to answer that."
                     refused = True
                     decision_audit["refusal_triggered"] = True
@@ -426,7 +429,6 @@ def _chat_impl(req: ChatRequest, request: Request, mode_override: str | None = N
                     top_chunks = []
 
                 # Use all citations (not filtered) to calculate max score for refusal decision
-                max_score = max(all_citation_scores) if all_citation_scores else 0.0
                 if (not refused) and ((not all_citation_scores) or (max_score < _SAFE_MIN_CITATION_CONFIDENCE)):
                     answer = "I don't have enough information in the provided runbooks to answer that."
                     refused = True
