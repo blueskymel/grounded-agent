@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core'
+import { Component, OnInit, ChangeDetectorRef, ElementRef, ViewChild } from '@angular/core'
 import { CommonModule } from '@angular/common'
 import { FormsModule } from '@angular/forms'
 import { HttpErrorResponse } from '@angular/common/http'
@@ -42,7 +42,7 @@ type ObsTrace = {
           ❌ Before - AI fabricates an answer
         </div>
 
-        <div class="messages">
+        <div class="messages" #beforeMessagesContainer>
           <div *ngFor="let m of beforeMessages" class="msg-row" [class.user-row]="m.role === 'user'">
             <div class="bubble" [class.user-bubble]="m.role === 'user'" [class.assistant-bubble]="m.role === 'assistant'">
               <div class="bubble-text">{{m.text}}</div>
@@ -75,7 +75,7 @@ type ObsTrace = {
           ✅ After - AI refuses to guess
         </div>
 
-        <div class="messages">
+        <div class="messages" #afterMessagesContainer>
           <div *ngFor="let m of afterMessages" class="msg-row" [class.user-row]="m.role === 'user'">
             <div class="bubble" [class.user-bubble]="m.role === 'user'" [class.assistant-bubble]="m.role === 'assistant'">
               <div class="bubble-text">{{m.text}}</div>
@@ -604,6 +604,9 @@ type ObsTrace = {
 `]
 })
 export class AppComponent implements OnInit {
+  @ViewChild('beforeMessagesContainer') beforeMessagesContainer?: ElementRef<HTMLDivElement>
+  @ViewChild('afterMessagesContainer') afterMessagesContainer?: ElementRef<HTMLDivElement>
+
   apiStatus: 'checking' | 'up' | 'down' = 'checking'
 
   citationExamples = [
@@ -698,6 +701,8 @@ export class AppComponent implements OnInit {
       { role: 'user', text: msg },
       { role: 'assistant', text: 'Contacting BEFORE endpoint...' }
     ]
+    this.cdr.detectChanges()
+    this.scrollToBottom('before')
 
     this.api.chatBefore(msg).subscribe({
       next: (res: ChatResult) => {
@@ -712,6 +717,7 @@ export class AppComponent implements OnInit {
         this.beforeLastAnswer = data.answer
         this.beforeSending = false
         this.cdr.detectChanges()
+        this.scrollToBottom('before')
       },
       error: (err) => {
         this.beforeMessages = this.replaceLastMessage(this.beforeMessages, {
@@ -720,6 +726,7 @@ export class AppComponent implements OnInit {
         })
         this.beforeSending = false
         this.cdr.detectChanges()
+        this.scrollToBottom('before')
       }
     })
   }
@@ -735,6 +742,8 @@ export class AppComponent implements OnInit {
       { role: 'user', text: msg },
       { role: 'assistant', text: 'Contacting AFTER endpoint...' }
     ]
+    this.cdr.detectChanges()
+    this.scrollToBottom('after')
 
     this.api.chatAfter(msg).subscribe({
       next: (res: ChatResult) => {
@@ -749,6 +758,7 @@ export class AppComponent implements OnInit {
         this.afterLastAnswer = data.answer
         this.afterSending = false
         this.cdr.detectChanges()
+        this.scrollToBottom('after')
       },
       error: (err) => {
         this.afterMessages = this.replaceLastMessage(this.afterMessages, {
@@ -757,6 +767,7 @@ export class AppComponent implements OnInit {
         })
         this.afterSending = false
         this.cdr.detectChanges()
+        this.scrollToBottom('after')
       }
     })
   }
@@ -825,5 +836,16 @@ export class AppComponent implements OnInit {
       citations: data.citations ?? [],
       retrievedChunks: data.retrieved_chunks ?? [],
     }
+  }
+
+  private scrollToBottom(panel: 'before' | 'after'): void {
+    setTimeout(() => {
+      const container = panel === 'before'
+        ? this.beforeMessagesContainer?.nativeElement
+        : this.afterMessagesContainer?.nativeElement
+
+      if (!container) return
+      container.scrollTop = container.scrollHeight
+    }, 0)
   }
 }
