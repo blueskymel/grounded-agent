@@ -116,12 +116,29 @@ def parse_intent(message: str) -> Optional[Intent]:
     if not msg:
         return None
 
-    # Price change
+
+    # Price change (primary pattern)
     m = PRICE_CHANGE_RE.search(msg)
     if m:
         return Intent(
             name="ANALYZE_PRICE_CHANGE",
             sku=m.group("sku").upper(),
+            old_price=float(m.group("old")),
+            new_price=float(m.group("new")),
+        )
+
+    # Fallback: handle 'Old price X, new price Y' and SKU with or without prefix
+    fallback_price_re = re.compile(
+        r"(?:SKU\s*(?P<sku>\d+))?.*?old price\s*(?P<old>\d+(?:\.\d+)?).*?new price\s*(?P<new>\d+(?:\.\d+)?)",
+        re.IGNORECASE,
+    )
+    m = fallback_price_re.search(msg)
+    if m:
+        sku = m.group("sku")
+        sku = f"SKU{sku}" if sku else "unknown"
+        return Intent(
+            name="ANALYZE_PRICE_CHANGE",
+            sku=sku,
             old_price=float(m.group("old")),
             new_price=float(m.group("new")),
         )
