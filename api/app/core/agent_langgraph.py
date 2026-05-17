@@ -1,6 +1,17 @@
+from app.core.memory_dashboard import update_dashboard
+
 from typing import Any, TypedDict
 
 from langgraph.graph import END, StateGraph
+from app.core.memory import ConversationMemory
+from app.core.semantic_memory import SemanticMemory
+import numpy as np
+def dummy_embed(text: str):
+    # Simple embedding stub: hash chars to vector for demo; replace with real model in prod
+    arr = np.zeros(384)
+    for i, c in enumerate(text):
+        arr[i % 384] += ord(c)
+    return arr
 
 from app.agent.intent_parser import parse_intent
 from app.tools.registry import run_tool
@@ -14,6 +25,12 @@ class AgentState(TypedDict, total=False):
     tool_input: dict[str, Any]
     answer: str
     tool_calls: list[dict[str, Any]]
+    memory: ConversationMemory
+def default_summariser(history):
+    # Simple concatenation summariser for demo; replace with LLM call for enterprise
+    turns = [f"User: {turn['message']}" + (f"\nAgent: {turn.get('agent_response','')}" if 'agent_response' in turn else '') for turn in history]
+    return '\n'.join(turns)[-1024:]
+
 
 
 def _simple_plan(message: str) -> tuple[str, dict | None]:
@@ -49,7 +66,12 @@ def _simple_plan(message: str) -> tuple[str, dict | None]:
 
 def _resolve_action(state: AgentState) -> AgentState:
     message = state["message"]
+    memory = state.get("memory")
     intent = parse_intent(message)
+
+    # Add user turn to memory
+    if memory:
+        memory.add_turn(user="user", message=message)
 
     if intent and intent.name == "LOW_STOCK_TRIAGE":
         return {
@@ -143,12 +165,64 @@ def run_agent_langgraph(message: str, retrieval_backend: str) -> tuple[str, list
         _route_tool_or_retrieve,
         {
             "run_tool": "run_tool",
-            "retrieve_fallback": "retrieve_fallback",
+            "retrieve": "retrieve_fallback",
         },
     )
     graph.add_edge("run_tool", END)
     graph.add_edge("retrieve_fallback", END)
 
-    app = graph.compile()
-    result = app.invoke({"message": message, "retrieval_backend": retrieval_backend})
-    return result.get("answer", ""), result.get("tool_calls", [])
+
+    # Attach conversation memory and semantic memory
+    memory = ConversationMemory()
+    semantic_memory = SemanticMemory(embedding_fn=dummy_embed, dim=384)
+
+    # Initial state
+
+    state: AgentState = {
+        "message": message,
+        "retrieval_backend": retrieval_backend,
+        "tool_calls": [],
+        "memory": memory,
+        "semantic_memory": semantic_memory,
+    }
+
+    # Run the graph
+    for s in graph.run(state):
+        state = s
+
+    # Demo: Add decision/fact to semantic memory after each run
+    semantic_memory.add_entry(
+        text=state.get("answer", ""),
+        meta={"tool_calls": state.get("tool_calls", [])}
+    )
+
+    # Demo: Retrieve prior similar facts/decisions
+    retrievals = semantic_memory.search(message, top_k=2)
+    for r in retrievals:
+        r['why'] = f"Similar to: {message[:40]}..."
+
+    # Summarise after run for visibility/demo
+    summary = memory.summarise(default_summariser)
+
+    # Token savings (demo: difference between full history and summary)
+    history_tokens = sum(len(turn['message']) + len(turn.get('agent_response','')) for turn in memory.get_recent_history())
+    summary_tokens = len(summary)
+    token_savings = max(history_tokens - summary_tokens, 0)
+
+    # Summarisation lifecycle (demo: always 'updated' after each run)
+    lifecycle = f"Summary updated after user message: '{message[:40]}...'"
+
+    # Update dashboard state
+    update_dashboard(
+        summary=summary,
+        retrievals=retrievals,
+        token_savings=token_savings,
+        lifecycle=lifecycle
+    )
+
+    print("Conversation summary (demo):\n", summary)
+    print("Semantic memory retrievals (demo):")
+    for r in retrievals:
+        print(f"- {r['text']} (score={r['score']:.2f})")
+
+    return state.get("answer", ""), state.get("tool_calls", [])

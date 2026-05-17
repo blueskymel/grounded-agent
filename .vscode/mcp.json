@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "grounded-agent": {
+      "command": "python",
+      "args": ["-m", "app.mcp_server"],
+      "cwd": "api"
+    }
+  }
+}

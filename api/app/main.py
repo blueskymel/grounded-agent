@@ -576,3 +576,8 @@ async def chat_stream(req: ChatRequest, request: Request):
             "X-Accel-Buffering": "no",
         },
     )
+
+# --- Memory Dashboard Integration ---
+from app.core.memory_dashboard import router as memory_dashboard_router
+app.include_router(memory_dashboard_router)
+# --- End Memory Dashboard Integration ---
