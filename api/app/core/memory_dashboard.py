@@ -14,7 +14,8 @@ DASHBOARD_STATE = {
     "summary": "No summary yet.",
     "retrievals": [],
     "token_savings": 0,
-    "lifecycle": "Idle"
+    "lifecycle": "Idle",
+    "tool_stats": [],  # List of tool call stats: name, retries, error (if any)
 }
 
 @router.get("/memory_dashboard")
@@ -28,8 +29,10 @@ def dashboard_data():
 
 # Utility to update dashboard state from agent code
 
-def update_dashboard(summary, retrievals, token_savings, lifecycle):
+def update_dashboard(summary, retrievals, token_savings, lifecycle, tool_stats=None):
     DASHBOARD_STATE["summary"] = summary
     DASHBOARD_STATE["retrievals"] = retrievals
     DASHBOARD_STATE["token_savings"] = token_savings
     DASHBOARD_STATE["lifecycle"] = lifecycle
+    if tool_stats is not None:
+        DASHBOARD_STATE["tool_stats"] = tool_stats

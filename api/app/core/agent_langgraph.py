@@ -160,11 +160,39 @@ def _resolve_action(state: AgentState) -> AgentState:
 def _run_tool(state: AgentState) -> AgentState:
     tool_name = state["tool_name"]
     tool_input = state.get("tool_input") or {}
-    output = run_tool(tool_name, tool_input)
-    return {
-        "answer": f"(tool) Ran {tool_name}",
-        "tool_calls": [{"name": tool_name, "input": tool_input, "output": output}],
-    }
+    max_retries = 2
+    last_error = None
+    for attempt in range(1, max_retries + 2):
+        try:
+            output = run_tool(tool_name, tool_input)
+            # If tool signals error, treat as failure and retry
+            if output.get("ok") is False:
+                last_error = output.get("error", "Unknown error")
+                print(f"[TOOL ERROR] {tool_name} attempt {attempt}: {last_error}")
+                if attempt > max_retries:
+                    return {
+                        "answer": f"(tool) {tool_name} failed after {attempt} attempts: {last_error}",
+                        "tool_calls": [{"name": tool_name, "input": tool_input, "output": output}],
+                        "error": last_error,
+                        "retries": attempt - 1,
+                    }
+                continue
+            return {
+                "answer": f"(tool) Ran {tool_name}",
+                "tool_calls": [{"name": tool_name, "input": tool_input, "output": output}],
+                "retries": attempt - 1,
+            }
+        except Exception as e:
+            last_error = str(e)
+            print(f"[TOOL EXCEPTION] {tool_name} attempt {attempt}: {last_error}")
+            if attempt > max_retries:
+                return {
+                    "answer": f"(tool) {tool_name} failed after {attempt} attempts: {last_error}",
+                    "tool_calls": [{"name": tool_name, "input": tool_input, "output": {"ok": False, "error": last_error}}],
+                    "error": last_error,
+                    "retries": attempt - 1,
+                }
+            time.sleep(0.1 * attempt)  # Exponential backoff (demo)
 
 
 def _retrieve_fallback(state: AgentState) -> AgentState:
@@ -247,12 +275,25 @@ def run_agent_langgraph(message: str, retrieval_backend: str) -> tuple[str, list
     # Summarisation lifecycle (demo: always 'updated' after each run)
     lifecycle = f"Summary updated after user message: '{message[:40]}...'"
 
+    # Collect tool call stats for dashboard
+    tool_stats = []
+    tool_calls = state.get("tool_calls", [])
+    # If tool_calls is a list of dicts with 'name', 'retries', and possibly 'error'
+    for tc in tool_calls:
+        tool_stat = {
+            "name": tc.get("name"),
+            "retries": state.get("retries", 0),
+            "error": state.get("error") if "error" in state else tc.get("output", {}).get("error")
+        }
+        tool_stats.append(tool_stat)
+
     # Update dashboard state
     update_dashboard(
         summary=summary,
         retrievals=retrievals,
         token_savings=token_savings,
-        lifecycle=lifecycle
+        lifecycle=lifecycle,
+        tool_stats=tool_stats
     )
 
     print("Conversation summary (demo):\n", summary)

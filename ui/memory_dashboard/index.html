@@ -33,6 +33,10 @@
         <h2>Summarisation Lifecycle</h2>
         <div id="lifecycle">Loading...</div>
     </div>
+    <div class="section">
+        <h2>Tool Call Stats</h2>
+        <div id="tool-stats">Loading...</div>
+    </div>
     <script>
         async function fetchDashboard() {
             const res = await fetch('/memory_dashboard/data');
@@ -47,6 +51,12 @@
             ).join('');
             document.getElementById('token-savings').innerHTML = `<span class='token'>${data.token_savings}</span> tokens saved by summarisation.`;
             document.getElementById('lifecycle').innerHTML = `<span class='lifecycle'>${data.lifecycle}</span>`;
+            document.getElementById('tool-stats').innerHTML = (data.tool_stats && data.tool_stats.length > 0)
+                ? `<table><tr><th>Tool</th><th>Retries</th><th>Error</th></tr>` +
+                  data.tool_stats.map(ts =>
+                    `<tr><td>${ts.name}</td><td>${ts.retries}</td><td>${ts.error ? `<span style='color:red'>${ts.error}</span>` : ''}</td></tr>`
+                  ).join('') + `</table>`
+                : 'No tool calls yet.';
         }
         fetchDashboard();
         setInterval(fetchDashboard, 2000);
