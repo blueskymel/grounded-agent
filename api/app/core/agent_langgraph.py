@@ -1,6 +1,34 @@
+import time
+from typing import Any, TypedDict
 from app.core.memory_dashboard import update_dashboard
 
-from typing import Any, TypedDict
+class AgentState(TypedDict, total=False):
+    message: str
+    retrieval_backend: str
+    intent_name: str
+    tool_name: str
+    tool_input: dict[str, Any]
+    answer: str
+    tool_calls: list[dict[str, Any]]
+    memory: 'ConversationMemory'
+    semantic_memory: 'SemanticMemory'
+
+# List of tool names that require human approval before execution
+TOOLS_REQUIRING_APPROVAL = {"analyze_price_change", "draft_store_incident_summary"}
+
+def _human_approval(state: AgentState) -> AgentState:
+    tool_name = state.get("tool_name")
+    tool_input = state.get("tool_input")
+    # In a real system, this would trigger a UI or notification for human approval
+    print(f"[APPROVAL NEEDED] Tool: {tool_name}, Input: {tool_input}")
+    # Simulate waiting for human approval (replace with async/queue in prod)
+    approved = True  # For demo, auto-approve; replace with real check
+    if approved:
+        print(f"[APPROVED] Tool: {tool_name}")
+        return state
+    else:
+        print(f"[REJECTED] Tool: {tool_name}")
+        return {"answer": f"Action '{tool_name}' was rejected by human approver.", "tool_calls": []}
 
 from langgraph.graph import END, StateGraph
 from app.core.memory import ConversationMemory
@@ -148,16 +176,21 @@ def _retrieve_fallback(state: AgentState) -> AgentState:
 
 
 def _route_tool_or_retrieve(state: AgentState) -> str:
-    if state.get("tool_name") == "retrieve":
+    tool_name = state.get("tool_name")
+    if tool_name == "retrieve":
         return "retrieve_fallback"
+    if tool_name in TOOLS_REQUIRING_APPROVAL:
+        return "human_approval"
     return "run_tool"
 
 
 def run_agent_langgraph(message: str, retrieval_backend: str) -> tuple[str, list[dict[str, Any]]]:
     graph = StateGraph(AgentState)
     graph.add_node("resolve_action", _resolve_action)
+
     graph.add_node("run_tool", _run_tool)
     graph.add_node("retrieve_fallback", _retrieve_fallback)
+    graph.add_node("human_approval", _human_approval)
 
     graph.set_entry_point("resolve_action")
     graph.add_conditional_edges(
@@ -166,10 +199,12 @@ def run_agent_langgraph(message: str, retrieval_backend: str) -> tuple[str, list
         {
             "run_tool": "run_tool",
             "retrieve": "retrieve_fallback",
+            "human_approval": "human_approval",
         },
     )
     graph.add_edge("run_tool", END)
     graph.add_edge("retrieve_fallback", END)
+    graph.add_edge("human_approval", "run_tool")
 
 
     # Attach conversation memory and semantic memory
@@ -186,9 +221,9 @@ def run_agent_langgraph(message: str, retrieval_backend: str) -> tuple[str, list
         "semantic_memory": semantic_memory,
     }
 
-    # Run the graph
-    for s in graph.run(state):
-        state = s
+    # Compile and run the graph
+    compiled = graph.compile()
+    state = compiled.invoke(state)
 
     # Demo: Add decision/fact to semantic memory after each run
     semantic_memory.add_entry(
