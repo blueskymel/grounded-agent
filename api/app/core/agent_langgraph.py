@@ -1,6 +1,13 @@
+
 import time
 from typing import Any, TypedDict
+import numpy as np
+from langgraph.graph import END, StateGraph
 from app.core.memory_dashboard import update_dashboard
+from app.core.memory import ConversationMemory
+from app.core.semantic_memory import SemanticMemory
+from app.agent.intent_parser import parse_intent
+from app.tools.registry import run_tool
 
 class AgentState(TypedDict, total=False):
     message: str
@@ -30,19 +37,13 @@ def _human_approval(state: AgentState) -> AgentState:
         print(f"[REJECTED] Tool: {tool_name}")
         return {"answer": f"Action '{tool_name}' was rejected by human approver.", "tool_calls": []}
 
-from langgraph.graph import END, StateGraph
-from app.core.memory import ConversationMemory
-from app.core.semantic_memory import SemanticMemory
-import numpy as np
+
 def dummy_embed(text: str):
     # Simple embedding stub: hash chars to vector for demo; replace with real model in prod
     arr = np.zeros(384)
     for i, c in enumerate(text):
         arr[i % 384] += ord(c)
     return arr
-
-from app.agent.intent_parser import parse_intent
-from app.tools.registry import run_tool
 
 
 class AgentState(TypedDict, total=False):

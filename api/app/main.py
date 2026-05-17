@@ -1,7 +1,18 @@
-from dotenv import load_dotenv
+
+import logging
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+import time
+import uuid
+import os
+import re
+import json
+import asyncio
 
 from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+
 from app.llm.grounded_answer import generate_grounded_answer, stream_grounded_answer
 from app.core.config import settings
 from app.schemas.chat import ChatRequest, ChatResponse, Citation, ToolCall
@@ -14,23 +25,15 @@ from app.security.prompt_injection import (
     check_user_message_for_prompt_injection,
     filter_retrieved_chunks_for_prompt_injection,
 )
-
-import logging
-from logging.handlers import RotatingFileHandler
-from pathlib import Path
-import time
-import uuid
-import os
-import re
-
 from app.observability.logger import log_event
 from app.observability.errors import format_exception
 from app.observability.tools import summarize_tool_calls
 from app.observability.app_insights import init_app_insights
 from app.observability.tracing import trace_step
-from fastapi.responses import StreamingResponse
-import json
-import asyncio
+
+
+from app.core.memory_dashboard import router as memory_dashboard_router
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -577,7 +580,7 @@ async def chat_stream(req: ChatRequest, request: Request):
         },
     )
 
+
 # --- Memory Dashboard Integration ---
-from app.core.memory_dashboard import router as memory_dashboard_router
 app.include_router(memory_dashboard_router)
 # --- End Memory Dashboard Integration ---

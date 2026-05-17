@@ -1,5 +1,4 @@
-def retrieve_stub(tool_input: dict) -> dict:
-    return {"ok": True, "tool": "retrieve", "result": f"Stub retrieval for: {tool_input}"}
+
 from typing import Callable
 from app.tools.incident_tools import create_incident_ticket, draft_change_plan
 from app.tools.retail_tools import (
@@ -15,6 +14,9 @@ from app.tools.tool_schemas import (
     CheckPromoComplianceInput,
 )
 from pydantic import ValidationError
+
+def retrieve_stub(tool_input: dict) -> dict:
+    return {"ok": True, "tool": "retrieve", "result": f"Stub retrieval for: {tool_input}"}
 
 
 ToolFn = Callable[[dict], dict]

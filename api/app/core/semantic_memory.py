@@ -1,3 +1,4 @@
+
 """
 SemanticMemory: Simple vector store for semantic retrieval of prior decisions, facts, workflows.
 Uses FAISS for vector search. Demo-friendly, enterprise-relevant.
@@ -26,9 +27,9 @@ class SemanticMemory:
             return []
         qvec = self.embedding_fn(query)
         qvec = np.array(qvec).astype('float32').reshape(1, -1)
-        D, I = self.index.search(qvec, top_k)
+        D, indices = self.index.search(qvec, top_k)
         results = []
-        for idx, dist in zip(I[0], D[0]):
+        for idx, dist in zip(indices[0], D[0]):
             if idx < len(self.entries):
                 entry = self.entries[idx]
                 entry = dict(entry)  # copy
